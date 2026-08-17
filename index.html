@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดเก็บผล EQA</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="file"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 15px; text-align: center; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>อัปโหลดผล EQA (PDF)</h2>
+    <form id="eqaForm">
+        <div class="form-group">
+            <label for="labName">ชื่อหน่วยงาน / Lab:</label>
+            <input type="text" id="labName" required placeholder="ระบุชื่อหน่วยงาน">
+        </div>
+        <div class="form-group">
+            <label for="eqaProgram">โปรแกรม EQA:</label>
+            <input type="text" id="eqaProgram" required placeholder="เช่น EQAS Chemistry">
+        </div>
+        <div class="form-group">
+            <label for="pdfFile">ไฟล์ผลการประเมิน (PDF เท่านั้น):</label>
+            <input type="file" id="pdfFile" accept="application/pdf" required>
+        </div>
+        <button type="submit" id="submitBtn">บันทึกข้อมูล</button>
+    </form>
+    <div id="status"></div>
+</div>
+
+<script>
+    // === นำ Web App URL ที่ได้จากขั้นตอนที่ 1 มาใส่ที่นี่ ===
+    const GAS_URL = 'ใส่_WEB_APP_URL_ที่นี่'; 
+
+    document.getElementById('eqaForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const labName = document.getElementById('labName').value;
+        const eqaProgram = document.getElementById('eqaProgram').value;
+        const fileInput = document.getElementById('pdfFile');
+        const file = fileInput.files[0];
+        
+        const statusDiv = document.getElementById('status');
+        const submitBtn = document.getElementById('submitBtn');
+
+        if (!file) {
+            alert('กรุณาเลือกไฟล์ PDF');
+            return;
+        }
+
+        // เช็คขนาดไฟล์ (แนะนำไม่เกิน 5-10MB เพราะ Base64 จะทำให้ขนาดใหญ่ขึ้นและ GAS มีข้อจำกัดเวลาทำงาน)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('ขนาดไฟล์ต้องไม่เกิน 5MB');
+            return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = 'กำลังอัปโหลด...';
+        statusDiv.innerText = '';
+        statusDiv.style.color = '#333';
+
+        // อ่านไฟล์และแปลงเป็น Base64
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            // ตัดส่วน Header ของ Base64 ออก (เช่น "data:application/pdf;base64,")
+            const base64Data = event.target.result.split(',')[1]; 
+
+            const payload = {
+                labName: labName,
+                eqaProgram: eqaProgram,
+                fileName: file.name,
+                fileType: file.type,
+                fileBase64: base64Data
+            };
+
+            // ส่งข้อมูลไปยัง Google Apps Script
+            fetch(GAS_URL, {
+                method: 'POST',
+                // ส่งเป็น text/plain เพื่อเลี่ยงปัญหา CORS Preflight ใน GAS
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    statusDiv.innerText = '✅ บันทึกข้อมูลสำเร็จ!';
+                    statusDiv.style.color = 'green';
+                    document.getElementById('eqaForm').reset();
+                } else {
+                    statusDiv.innerText = '❌ เกิดข้อผิดพลาด: ' + data.message;
+                    statusDiv.style.color = 'red';
+                }
+            })
+            .catch(error => {
+                statusDiv.innerText = '❌ เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์';
+                statusDiv.style.color = 'red';
+                console.error(error);
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'บันทึกข้อมูล';
+            });
+        };
+        
+        reader.readAsDataURL(file);
+    });
+</script>
+
+</body>
+</html>
