@@ -86,25 +86,60 @@
 
     // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
     function parseRIQASData(text) {
-        // ใช้ Regular Expression (RegEx) เพื่อดักจับข้อความ
-        const labRefNo = (text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/) || [])[1] || 'ไม่พบข้อมูล';
-        const cycle = (text.match(/CYCLE\s*(\d+)/) || [])[1] || 'ไม่พบข้อมูล';
-        const sample = (text.match(/SAMPLE\s*(\d+)/) || [])[1] || 'ไม่พบข้อมูล';
-        const issueDate = (text.match(/Issue Date:\s*([\d\/]+)/) || [])[1] || 'ไม่พบข้อมูล';
+        // 1. ดึงข้อมูลพื้นฐานด้วย RegEx
+        const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
+        const labRefNo = labRefNoMatch ? labRefNoMatch[1] : 'ไม่พบข้อมูล';
         
-        // กรองคำนึงถึงบริบทจากไฟล์ตัวอย่าง
+        const cycleMatch = text.match(/CYCLE\s*(\d+)/i);
+        const cycle = cycleMatch ? cycleMatch[1] : 'ไม่พบข้อมูล';
+        
+        const sampleMatch = text.match(/SAMPLE\s*(\d+)/i);
+        const sample = sampleMatch ? sampleMatch[1] : 'ไม่พบข้อมูล';
+        
+        const issueDateMatch = text.match(/Issue Date:\s*([\d\/]+)/i);
+        const issueDate = issueDateMatch ? issueDateMatch[1] : 'ไม่พบข้อมูล';
+        
         const eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
-        let labName = text.includes('Ramathibodi Hospital') ? 'Ramathibodi Hospital (Immunology)' : 'ไม่พบข้อมูลหน่วยงาน';
-        let machineName = text.includes('Dade Dimension') ? 'Dade Dimension' : 'ไม่พบชื่อเครื่อง';
         
-        // ค้นหาชื่อ Test และ SDI จากส่วนของตาราง 
-        // สมมติฐาน: "C-Reactive Protein 56.039 56.550 0.22"
-        let testName = 'C-Reactive Protein';
+        // ค้นหาชื่อหน่วยงาน (ตัวอย่างคือบรรทัดแรกๆ ของไฟล์)
+        const labNameMatch = text.match(/^(.+?)\s+SPECIFIC PROTEINS/);
+        let labName = labNameMatch ? labNameMatch[1].trim() : 'ไม่พบข้อมูลหน่วยงาน';
+        if(labName.includes("PAGE")) {
+            // หากเผลอไปดึงติดคำว่า PAGE ให้ลบออก
+            labName = labName.replace(/--- PAGE \d+ ---/, '').trim();
+        }
+
+        // --- ส่วนที่ปรับปรุงใหม่ ---
+        
+        // 2. ดึงชื่อเครื่อง (อ่านจากข้อความที่อยู่ถัดจาก LABORATORY REF. NO.)
+        let machineName = 'ไม่พบชื่อเครื่อง';
+        // มองหา LABORATORY REF. NO. ตามด้วยตัวเลข แล้วดึงข้อความที่อยู่ถัดไปก่อนจะถึงคำว่า "Authorised" หรือ "Issue"
+        const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*(?:Reg\s*\([A-Za-z]\)\s*-\s*)?([^"]+?)\s*(?="?Authorised by|"Authorised|Issue No)/i;
+        const machineMatch = text.match(machineRegex);
+        if (machineMatch) {
+            machineName = machineMatch[1].trim(); // จะได้ค่าเช่น "Dade Dimension"
+        }
+
+        // 3. ดึงค่า SDI จากหน้าสุดท้าย
+        let testName = 'C-Reactive Protein'; // กำหนดชื่อการทดสอบ
         let sdi = 'ไม่พบข้อมูล';
         
-        const sdiMatch = text.match(/C-Reactive Protein.*?([\d\.]+)\s+([\d\.]+)\s+([\d\.\-]+)/);
-        if (sdiMatch) {
-            sdi = sdiMatch[3]; // จับกลุ่มตัวเลขชุดที่ 3 ซึ่งเป็นตำแหน่งของ SDI
+        // สร้าง Pattern เพื่อหาตาราง: ชื่อ Test -> Mean -> Your Result -> SDI
+        // เราใช้ flag 'g' เพื่อหาคำนี้ "ทุกจุด" ในเอกสาร
+        const regexSDI = new RegExp(testName + "\\s+([\\d\\.]+)\\s+([\\d\\.]+)\\s+([\\d\\.\\-]+)", "g");
+        let match;
+        let lastMatch = null;
+        
+        // วนลูปเพื่อหาข้อมูล "ตัวสุดท้าย" ที่เจอในเอกสาร (ซึ่งก็คือตารางสรุปในหน้า 3)
+        while ((match = regexSDI.exec(text)) !== null) {
+            lastMatch = match;
+        }
+        
+        // ถ้าเจอข้อมูลในหน้าสุดท้าย
+        if (lastMatch) {
+            // lastMatch[1] คือ Mean
+            // lastMatch[2] คือ Your Result
+            sdi = lastMatch[3]; // กลุ่มที่ 3 คือค่า SDI
         }
 
         return { labName, eqaProgram, labRefNo, machineName, issueDate, cycle, sample, testName, sdi };
