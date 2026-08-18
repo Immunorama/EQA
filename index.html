@@ -96,36 +96,41 @@
         const issueDateMatch = text.match(/Issue Date:\s*([\d\/]+)/i);
         const issueDate = issueDateMatch ? issueDateMatch[1] : 'ไม่พบข้อมูล';
         
-        const eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
-        
-        // --- 2. ดึงชื่อหน่วยงาน (Ramathibodi Hospital (Immunology)) ---
+        // --- 2. ดึงชื่อโปรแกรม EQA (อ่านจากข้อความที่อยู่ "เหนือ/ก่อน" CYCLE) ---
+        let eqaProgram = 'ไม่พบข้อมูลโปรแกรม';
+        // หาข้อความตัวพิมพ์ใหญ่ (และอาจมีเว้นวรรค) ที่อยู่ติดกับคำว่า CYCLE ด้านหน้า
+        const programMatch = text.match(/([A-Z\s\&\-]+)\s+CYCLE\s+\d+/);
+        if (programMatch) {
+            eqaProgram = programMatch[1].trim();
+        } else {
+            // กรณีหาไม่เจอ ให้คืนค่าพื้นฐานไว้ก่อน
+            eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
+        }
+
+        // --- 3. ดึงชื่อหน่วยงาน (อยู่ระหว่างคำว่า PAGE 1 กับ ชื่อโปรแกรม) ---
         let labName = 'ไม่พบข้อมูลหน่วยงาน';
-        const labNameMatch = text.match(/---\s*PAGE\s*1\s*---\s*(.+?)\s+SPECIFIC PROTEINS/i);
+        // ใช้ชื่อโปรแกรมที่ดึงมาได้ในข้อ 2 มาเป็นจุดสิ้นสุดการค้นหา
+        const labNameRegex = new RegExp(`---\\s*PAGE\\s*1\\s*---\\s*(.+?)\\s+${eqaProgram}`, 'i');
+        const labNameMatch = text.match(labNameRegex);
         
         if (labNameMatch) {
             labName = labNameMatch[1].trim(); 
         } else {
-            // เผื่อกรณีไฟล์ไม่ได้ขึ้นด้วย PAGE 1 ให้หาแบบสำรอง
-            const fallbackMatch = text.match(/(.+?)\s+SPECIFIC PROTEINS/i);
-            if (fallbackMatch) {
-                labName = fallbackMatch[1].replace(/---\s*PAGE\s*\d+\s*---/g, '').trim();
-            } else {
-                // ถ้าหาไม่เจอจริงๆ คืนค่าเป็นชื่อโรงพยาบาลโดยตรง
-                labName = 'Ramathibodi Hospital (Immunology)';
-            }
+            // Fallback เผื่อจับข้อความไม่ได้
+            labName = 'Ramathibodi Hospital (Immunology)';
         }
 
-        // --- 3. ดึงชื่อเครื่อง (หลัง LABORATORY REF. NO.) ---
+        // --- 4. ดึงชื่อเครื่อง (อ่านจากข้อความที่อยู่ "ใต้/หลัง" LABORATORY REF. NO.) ---
         let machineName = 'ไม่พบชื่อเครื่อง';
+        // ดึงข้อความต่อจาก REF. NO. (ตัด Reg(...) ออกถ้ามี) และไปหยุดที่คำว่า Authorised by
         const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*(?:Reg\s*\([A-Za-z]\)\s*-\s*)?([^"]+?)\s*(?="?Authorised by|"Authorised|Issue No)/i;
         const machineMatch = text.match(machineRegex);
         if (machineMatch) {
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- 4. ดึงข้อมูลทุก Test และค่า SDI จากตารางหน้าสุดท้าย ---
+        // --- 5. ดึงข้อมูลทุก Test และค่า SDI จากตารางหน้าสุดท้าย ---
         let tests = [];
-        // ค้นหาช่วงข้อความที่เป็นตารางสรุปผล (Performance)
         const summaryRegex = /Performance\s+(.*?)(?:ORMSDI|END OF REPORT)/;
         const summaryMatch = text.match(summaryRegex);
 
@@ -141,20 +146,19 @@
                 if(testName.toLowerCase() !== 'analyte' && testName !== '') {
                     tests.push({
                         testName: testName,
-                        sdi: match[4] // ดึงค่าจากคอลัมน์ที่ 4 ซึ่งคือช่อง SDI
+                        sdi: match[4] // ดึงค่าจากคอลัมน์ที่ 4 (SDI)
                     });
                 }
             }
         }
 
-        // กรณีฉุกเฉินถ้าจับคู่ตารางหน้าสุดท้ายไม่ได้เลย ให้ส่งค่าไปแจ้งเตือน 1 แถว
         if (tests.length === 0) {
-            tests.push({ testName: 'ไม่พบข้อมูลการทดสอบ (หรืออ่านตารางไม่ได้)', sdi: '-' });
+            tests.push({ testName: 'ไม่พบข้อมูลการทดสอบ', sdi: '-' });
         }
 
         return { labName, eqaProgram, labRefNo, machineName, issueDate, cycle, sample, tests };
     }
-
+        
     document.getElementById('eqaForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
