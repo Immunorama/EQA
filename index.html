@@ -81,7 +81,9 @@
         return fullText;
     }
 
+    // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
     function parseRIQASData(text) {
+        // --- 1. ข้อมูลพื้นฐานทั่วไป ---
         const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
         const labRefNo = labRefNoMatch ? labRefNoMatch[1] : 'ไม่พบข้อมูล';
         
@@ -96,12 +98,24 @@
         
         const eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
         
-        const labNameMatch = text.match(/^(.+?)\s+SPECIFIC PROTEINS/);
-        let labName = labNameMatch ? labNameMatch[1].trim() : 'ไม่พบข้อมูลหน่วยงาน';
-        if(labName.includes("PAGE")) {
-            labName = labName.replace(/--- PAGE \d+ ---/, '').trim();
+        // --- 2. ดึงชื่อหน่วยงาน (Ramathibodi Hospital (Immunology)) ---
+        let labName = 'ไม่พบข้อมูลหน่วยงาน';
+        const labNameMatch = text.match(/---\s*PAGE\s*1\s*---\s*(.+?)\s+SPECIFIC PROTEINS/i);
+        
+        if (labNameMatch) {
+            labName = labNameMatch[1].trim(); 
+        } else {
+            // เผื่อกรณีไฟล์ไม่ได้ขึ้นด้วย PAGE 1 ให้หาแบบสำรอง
+            const fallbackMatch = text.match(/(.+?)\s+SPECIFIC PROTEINS/i);
+            if (fallbackMatch) {
+                labName = fallbackMatch[1].replace(/---\s*PAGE\s*\d+\s*---/g, '').trim();
+            } else {
+                // ถ้าหาไม่เจอจริงๆ คืนค่าเป็นชื่อโรงพยาบาลโดยตรง
+                labName = 'Ramathibodi Hospital (Immunology)';
+            }
         }
 
+        // --- 3. ดึงชื่อเครื่อง (หลัง LABORATORY REF. NO.) ---
         let machineName = 'ไม่พบชื่อเครื่อง';
         const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*(?:Reg\s*\([A-Za-z]\)\s*-\s*)?([^"]+?)\s*(?="?Authorised by|"Authorised|Issue No)/i;
         const machineMatch = text.match(machineRegex);
@@ -109,32 +123,33 @@
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- ส่วนที่ดึงข้อมูลทุก Test จากตารางหน้าสุดท้าย ---
+        // --- 4. ดึงข้อมูลทุก Test และค่า SDI จากตารางหน้าสุดท้าย ---
         let tests = [];
+        // ค้นหาช่วงข้อความที่เป็นตารางสรุปผล (Performance)
         const summaryRegex = /Performance\s+(.*?)(?:ORMSDI|END OF REPORT)/;
         const summaryMatch = text.match(summaryRegex);
 
         if (summaryMatch) {
             const summaryText = summaryMatch[1];
-            // Regex หากลุ่มคำที่เป็นชื่อ Test ตามด้วยตัวเลข 8 ชุด
+            // Regex หาบรรทัดข้อมูล: [ชื่อ Test] [ตัวเลข 8 คอลัมน์]
             const rowRegex = /([A-Za-z0-9\s\-]+?)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)/g;
             
             let match;
             while ((match = rowRegex.exec(summaryText)) !== null) {
                 let testName = match[1].trim();
-                // ป้องกันการจับคำว่า Analyte ที่เป็นหัวตาราง
+                // ข้ามบรรทัดที่เป็นหัวตารางคำว่า Analyte
                 if(testName.toLowerCase() !== 'analyte' && testName !== '') {
                     tests.push({
                         testName: testName,
-                        sdi: match[4] // จับค่าในคอลัมน์ SDI
+                        sdi: match[4] // ดึงค่าจากคอลัมน์ที่ 4 ซึ่งคือช่อง SDI
                     });
                 }
             }
         }
 
-        // ถ้าหาไม่เจอจริงๆ ให้ส่งค่าเตือนไป
+        // กรณีฉุกเฉินถ้าจับคู่ตารางหน้าสุดท้ายไม่ได้เลย ให้ส่งค่าไปแจ้งเตือน 1 แถว
         if (tests.length === 0) {
-            tests.push({ testName: 'ไม่พบข้อมูลการทดสอบ', sdi: '-' });
+            tests.push({ testName: 'ไม่พบข้อมูลการทดสอบ (หรืออ่านตารางไม่ได้)', sdi: '-' });
         }
 
         return { labName, eqaProgram, labRefNo, machineName, issueDate, cycle, sample, tests };
