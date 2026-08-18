@@ -96,14 +96,14 @@
         const issueDateMatch = text.match(/Issue Date:\s*([\d\/]+)/i);
         const issueDate = issueDateMatch ? issueDateMatch[1] : 'ไม่พบข้อมูล';
         
-        // --- 2. ดึงชื่อโปรแกรม EQA ---
+       // --- 2. ดึงชื่อโปรแกรม EQA ---
         let eqaProgram = 'ไม่พบข้อมูลโปรแกรม';
         
         // อัปเดต Regex ให้รองรับตัวเลข (0-9) และรองรับโครงสร้างที่มีคำว่า LABORATORY REF. NO. คั่นกลาง
-        const programMatch = text.match(/([A-Za-z0-9\s\&\-\(\)]+?)\s*(?:LABORATORY REF\. NO\.\s*[\d\.]+\s*)?CYCLE\s*\d+/i);
+        const programMatch = text.match(/([A-Za-z0-9\s\&\-\(\)]+?)\s*(?:LABORATORY\s*REF\.\s*NO\.\s*[\d\.]+\s*)?CYCLE\s*\d+/i);
         
         if (programMatch) {
-            // ทำความสะอาดข้อความ เผื่อกรณี \s กวาดเอาบรรทัดด้านบน(ชื่อโรงพยาบาล)ติดมาด้วย
+            // ทำความสะอาดข้อความ เผื่อกรณีมีการกวาดเอาบรรทัดด้านบนติดมาด้วย
             let rawProgramName = programMatch[1].trim();
             let lines = rawProgramName.split('\n');
             // เลือกเอาเฉพาะบรรทัดสุดท้ายที่ติดกับคำว่า CYCLE หรือ LAB REF (ซึ่งก็คือบรรทัดชื่อโปรแกรม)
