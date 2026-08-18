@@ -123,7 +123,7 @@
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อุดช่องโหว่คำขยะจากหน้าก่อนหน้าแบบ 100%) ---
+        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อัปเกรดระบบเบรกคำขยะขั้นสุด) ---
         let tests = [];
         const summaryRegex = /(?:Performance|RMTS)\s+(.*?)(?:ORMSDI|END OF REPORT|Issue No)/i;
         const summaryMatch = text.match(summaryRegex);
@@ -131,7 +131,7 @@
         if (summaryMatch) {
             const summaryText = summaryMatch[1];
             
-            // ดักจับกลุ่มตัวเลข 8 ชุด (ผลลัพธ์การทดสอบ)
+            // ดักจับกลุ่มตัวเลข 8 ชุด 
             const numPattern = "(-?\\d+(?:\\.\\d+)?)";
             const eightNumbersRegex = new RegExp(`\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}(?!\\s+-?\\d)`, "g");
             
@@ -142,29 +142,26 @@
                 let beforeText = summaryText.substring(lastIndex, match.index);
                 lastIndex = eightNumbersRegex.lastIndex; 
                 
-                // กรองข้อความว่างออก
                 let words = beforeText.trim().split(/\s+/).filter(w => w.length > 0);
-                
                 let testNameParts = [];
+                
                 for (let i = words.length - 1; i >= 0; i--) {
                     let word = words[i];
+                    let wLower = word.toLowerCase();
                     
-                    // --- ชุดคำสั่งกรองคำขยะแบบเข้มงวด (เพิ่มคำว่า Target, Score, TDPA และสัญลักษณ์) ---
-                    const stopRegex = /^(Laboratories|Number|DEV|Deviation|Analyte|Mean|SD|CV|SDI|RMTS|Target|Score|TDPA|Acceptable|limits|Biological|Variation|N\/A|performance|RIQAS|derived|from|for|of|Sample|Page|End|Report)$/i;
-                    const unitRegex = /\/ml|\/l|\/dl|IU\/|mmol|umol|ug|mg|ng/i;
-                    const symbolRegex = /[=<>]/; // หยุดเมื่อเจอ = หรือ < หรือ >
-                    const percentNumberRegex = /\d+%/; // หยุดเมื่อเจอตัวเลขที่มี % เช่น 8.2%
-                    const scaleRegex = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/;
-
-                    // ถ้าอ่านย้อนไปเจอคำหรือสัญลักษณ์พวกนี้ ให้หยุดดึงข้อความทันที!
-                    if (
-                        word.match(stopRegex) || 
-                        word.match(unitRegex) || 
-                        word.match(symbolRegex) || 
-                        word.match(percentNumberRegex) || 
-                        word.match(scaleRegex) ||
-                        word === 'N'
-                    ) {
+                    // --- กฎการเตะเบรก (Stop Conditions) ที่แม่นยำที่สุด ---
+                    const exactBadWords = ['target', 'score', 'tdpa', 'acceptable', 'limits', 'biological', 'variation', 'n/a', 'performance', 'riqas', 'derived', 'from', 'for', 'of', 'laboratories', 'laboratory', 'number', 'analyte', 'mean', 'sd', 'cv', 'sdi', 'rmts'];
+                    
+                    const isExactBad = exactBadWords.includes(wLower);
+                    const hasPercent = wLower.includes('%'); // ดัก 8.2%, %DEV, RM%DEV ได้หมด
+                    const hasSymbol = /[<>=]/.test(wLower); // ดักเครื่องหมายต่างๆ
+                    const isDecimal = /^\d+\.\d+$/.test(wLower); // ดักตัวเลขทศนิยมเช่น 4.3, 8.20
+                    const isScale = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/.test(wLower); // ดักสเกลกราฟ
+                    const hasUnit = /\/ml|\/l|\/dl|iu\/|mmol|umol|ug|mg|ng/.test(wLower); // ดักหน่วยการวัด
+                    const hasDev = wLower.includes('dev'); // ดัก DEV, %DEV, RM%DEV
+                    
+                    // ถ้าเข้าเงื่อนไขใดเงื่อนไขหนึ่ง ให้หยุดดึงข้อความทันที!
+                    if (isExactBad || hasPercent || hasSymbol || isDecimal || isScale || hasUnit || hasDev) {
                         break;
                     }
                     
@@ -176,8 +173,8 @@
                 // บันทึกเฉพาะเมื่อได้ชื่อที่สมบูรณ์เท่านั้น
                 if(testName !== '') {
                     tests.push({
-                        testName: testName,     // ชื่อ Test คลีนๆ แน่นอน
-                        sdi: match[3]           // ดึงค่า SDI ในช่องที่ 3 
+                        testName: testName,     
+                        sdi: match[3]           // คอลัมน์ที่ 3 คือ ค่า SDI
                     });
                 }
             }
