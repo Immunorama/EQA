@@ -123,14 +123,21 @@
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อัปเกรดระบบเบรกคำขยะขั้นสุด) ---
+        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อัปเกรดระบบล็อคเป้าตารางหน้าสุดท้าย) ---
         let tests = [];
-        const summaryRegex = /(?:Performance|RMTS)\s+(.*?)(?:ORMSDI|END OF REPORT|Issue No)/i;
-        const summaryMatch = text.match(summaryRegex);
+        let summaryText = "";
+        
+        // แบ่งเอกสารด้วยหัวตารางคำว่า "RMTS Performance" เพื่อตัดปัญหาข้อความหลอกบนหน้า 2
+        const headerSplit = text.split(/RMTS\s+Performance/i);
+        
+        if (headerSplit.length > 1) {
+            summaryText = headerSplit.pop(); // กวาดข้อความเฉพาะส่วนที่อยู่หลังหัวตาราง
+        } else {
+            const fallbackSplit = text.split(/Analyte/i);
+            summaryText = fallbackSplit.pop();
+        }
 
-        if (summaryMatch) {
-            const summaryText = summaryMatch[1];
-            
+        if (summaryText) {
             // ดักจับกลุ่มตัวเลข 8 ชุด 
             const numPattern = "(-?\\d+(?:\\.\\d+)?)";
             const eightNumbersRegex = new RegExp(`\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}(?!\\s+-?\\d)`, "g");
@@ -149,18 +156,18 @@
                     let word = words[i];
                     let wLower = word.toLowerCase();
                     
-                    // --- กฎการเตะเบรก (Stop Conditions) ที่แม่นยำที่สุด ---
-                    const exactBadWords = ['target', 'score', 'tdpa', 'acceptable', 'limits', 'biological', 'variation', 'n/a', 'performance', 'riqas', 'derived', 'from', 'for', 'of', 'laboratories', 'laboratory', 'number', 'analyte', 'mean', 'sd', 'cv', 'sdi', 'rmts'];
+                    // --- กฎการเตะเบรก (Stop Conditions) ---
+                    const exactBadWords = ['target', 'score', 'tdpa', 'acceptable', 'limits', 'biological', 'variation', 'n/a', 'performance', 'riqas', 'derived', 'from', 'for', 'of', 'laboratories', 'laboratory', 'number', 'analyte', 'mean', 'sd', 'cv', 'sdi', 'rmts', 'ts', 'rmsdi', 'dev', 'issue', 'page', 'report', 'the', 'assessment', 'accreditation'];
                     
                     const isExactBad = exactBadWords.includes(wLower);
-                    const hasPercent = wLower.includes('%'); // ดัก 8.2%, %DEV, RM%DEV ได้หมด
-                    const hasSymbol = /[<>=]/.test(wLower); // ดักเครื่องหมายต่างๆ
-                    const isDecimal = /^\d+\.\d+$/.test(wLower); // ดักตัวเลขทศนิยมเช่น 4.3, 8.20
-                    const isScale = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/.test(wLower); // ดักสเกลกราฟ
-                    const hasUnit = /\/ml|\/l|\/dl|iu\/|mmol|umol|ug|mg|ng/.test(wLower); // ดักหน่วยการวัด
-                    const hasDev = wLower.includes('dev'); // ดัก DEV, %DEV, RM%DEV
+                    const hasPercent = wLower.includes('%'); 
+                    const hasSymbol = /[<>=]/.test(wLower); 
+                    const isDecimal = /^\d+\.\d+$/.test(wLower); 
+                    const isScale = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/.test(wLower); 
+                    const hasUnit = /\/ml|\/l|\/dl|iu\/|mmol|umol|ug|mg|ng/i.test(wLower); 
+                    const hasDev = wLower.includes('dev'); 
                     
-                    // ถ้าเข้าเงื่อนไขใดเงื่อนไขหนึ่ง ให้หยุดดึงข้อความทันที!
+                    // ถ้าเข้าเงื่อนไขขยะ ให้หยุดดึงข้อความทันที
                     if (isExactBad || hasPercent || hasSymbol || isDecimal || isScale || hasUnit || hasDev) {
                         break;
                     }
@@ -168,12 +175,12 @@
                     testNameParts.unshift(word);
                 }
                 
-                let testName = testNameParts.join(' ').trim();
+                // นำคำมาต่อกันแล้วลบลูกน้ำส่วนเกินท้ายคำ (ถ้ามี)
+                let testName = testNameParts.join(' ').replace(/[,]+$/, '').trim();
                 
-                // บันทึกเฉพาะเมื่อได้ชื่อที่สมบูรณ์เท่านั้น
                 if(testName !== '') {
                     tests.push({
-                        testName: testName,     
+                        testName: testName,     // จะได้ชื่อ Beta-2-Microglobulin
                         sdi: match[3]           // คอลัมน์ที่ 3 คือ ค่า SDI
                     });
                 }
