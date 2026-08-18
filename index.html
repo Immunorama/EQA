@@ -81,7 +81,7 @@
         return fullText;
     }
 
-  // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
+ // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
     function parseRIQASData(text) {
         // --- 1. ข้อมูลพื้นฐานทั่วไป ---
         const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
@@ -123,7 +123,7 @@
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (แก้ปัญหาขยะจากกราฟแท่ง) ---
+        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อุดช่องโหว่คำขยะจากหน้าก่อนหน้าแบบ 100%) ---
         let tests = [];
         const summaryRegex = /(?:Performance|RMTS)\s+(.*?)(?:ORMSDI|END OF REPORT|Issue No)/i;
         const summaryMatch = text.match(summaryRegex);
@@ -131,40 +131,52 @@
         if (summaryMatch) {
             const summaryText = summaryMatch[1];
             
-            // สร้าง Pattern ดักจับกลุ่มตัวเลข 8 ชุดติดกัน (ผลลัพธ์การทดสอบ)
+            // ดักจับกลุ่มตัวเลข 8 ชุด (ผลลัพธ์การทดสอบ)
             const numPattern = "(-?\\d+(?:\\.\\d+)?)";
             const eightNumbersRegex = new RegExp(`\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}(?!\\s+-?\\d)`, "g");
             
             let match;
-            let lastIndex = 0; // เก็บตำแหน่งสิ้นสุดของตัวเลขรอบที่แล้ว
+            let lastIndex = 0;
             
             while ((match = eightNumbersRegex.exec(summaryText)) !== null) {
-                // 1. ดึงข้อความที่อยู่ "ช่องว่างระหว่าง" ตัวเลขรอบที่แล้ว จนถึง ตัวเลขรอบนี้
                 let beforeText = summaryText.substring(lastIndex, match.index);
                 lastIndex = eightNumbersRegex.lastIndex; 
                 
-                // 2. แยกข้อความออกเป็นคำๆ
-                let words = beforeText.trim().split(/\s+/);
+                // กรองข้อความว่างออก
+                let words = beforeText.trim().split(/\s+/).filter(w => w.length > 0);
                 
-                // 3. กรองคำขยะที่ติดมาจากกราฟ หรือหัวตาราง (ไล่จากคำหลังสุด ย้อนกลับไป)
                 let testNameParts = [];
                 for (let i = words.length - 1; i >= 0; i--) {
                     let word = words[i];
                     
-                    // หากเจอคำที่เป็นของกราฟแท่ง (เช่น Laboratories, U/ml, สเกลตัวเลข) หรือหัวตาราง ให้หยุดดึงคำ
-                    if (word.match(/Laboratories|Number|DEV|U\/ml|Analyte|Mean|SD|CV|SDI|RMTS/i) || 
-                        word.match(/^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150)$/)) {
+                    // --- ชุดคำสั่งกรองคำขยะแบบเข้มงวด (เพิ่มคำว่า Target, Score, TDPA และสัญลักษณ์) ---
+                    const stopRegex = /^(Laboratories|Number|DEV|Deviation|Analyte|Mean|SD|CV|SDI|RMTS|Target|Score|TDPA|Acceptable|limits|Biological|Variation|N\/A|performance|RIQAS|derived|from|for|of|Sample|Page|End|Report)$/i;
+                    const unitRegex = /\/ml|\/l|\/dl|IU\/|mmol|umol|ug|mg|ng/i;
+                    const symbolRegex = /[=<>]/; // หยุดเมื่อเจอ = หรือ < หรือ >
+                    const percentNumberRegex = /\d+%/; // หยุดเมื่อเจอตัวเลขที่มี % เช่น 8.2%
+                    const scaleRegex = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/;
+
+                    // ถ้าอ่านย้อนไปเจอคำหรือสัญลักษณ์พวกนี้ ให้หยุดดึงข้อความทันที!
+                    if (
+                        word.match(stopRegex) || 
+                        word.match(unitRegex) || 
+                        word.match(symbolRegex) || 
+                        word.match(percentNumberRegex) || 
+                        word.match(scaleRegex) ||
+                        word === 'N'
+                    ) {
                         break;
                     }
+                    
                     testNameParts.unshift(word);
                 }
                 
                 let testName = testNameParts.join(' ').trim();
                 
-                // บันทึกข้อมูลเฉพาะที่มีชื่อ Test
+                // บันทึกเฉพาะเมื่อได้ชื่อที่สมบูรณ์เท่านั้น
                 if(testName !== '') {
                     tests.push({
-                        testName: testName,     // จะได้ชื่อ CA 125, CA 15-3 แบบไม่มีคำขยะติดมาแน่นอน
+                        testName: testName,     // ชื่อ Test คลีนๆ แน่นอน
                         sdi: match[3]           // ดึงค่า SDI ในช่องที่ 3 
                     });
                 }
