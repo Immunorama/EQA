@@ -81,7 +81,7 @@
         return fullText;
     }
 
-   // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
+  // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
     function parseRIQASData(text) {
         // --- 1. ข้อมูลพื้นฐานทั่วไป ---
         const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
@@ -102,7 +102,7 @@
         if (programMatch) {
             eqaProgram = programMatch[1].trim();
         } else {
-            eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
+            eqaProgram = text.includes('IMMUNOASSAY') ? 'IMMUNOASSAY' : 'ไม่พบข้อมูล';
         }
 
         // --- 3. ดึงชื่อหน่วยงาน ---
@@ -123,26 +123,32 @@
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- 5. ดึงข้อมูลทุก Test และค่า SDI จากตารางหน้าสุดท้าย ---
+        // --- 5. ดึงข้อมูลทุก Test และค่า SDI จากตารางหน้าสุดท้าย (อัปเกรดความแม่นยำ) ---
         let tests = [];
-        // ค้นหาคำว่า Performance จนถึง ORMSDI หรือจุดจบตาราง
-        const summaryRegex = /Performance\s+(.*?)(?:ORMSDI|END OF REPORT|Issue No)/i;
+        // ค้นหาจุดเริ่มต้นตาราง (หลังคำว่า Performance หรือ RMTS)
+        const summaryRegex = /(?:Performance|RMTS)\s+(.*?)(?:ORMSDI|END OF REPORT|Issue No)/i;
         const summaryMatch = text.match(summaryRegex);
 
         if (summaryMatch) {
             const summaryText = summaryMatch[1];
-            // Regex อัปเกรด: รองรับ () ในชื่อ และบังคับว่าต้องมีตัวเลขตามหลังแค่ 8 ชุดเป๊ะๆ เท่านั้น
-            const rowRegex = /([A-Za-z0-9][A-Za-z0-9\s\-\,\/\.\(\)]*?)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)(?!\s+[-\d\.]+)/g;
+            
+            // สร้าง Pattern ดักจับ "ตัวเลขผลลัพธ์" แบบเข้มงวด
+            // จะจับเฉพาะรูปแบบตัวเลขจริงๆ เช่น 132.249, 78, -0.22 
+            // ทำให้ชื่อ Test อย่าง CA 15-3 จะไม่ถูกมองว่าเป็นผลลัพธ์เด็ดขาด
+            const numPattern = "(-?\\d+(?:\\.\\d+)?)"; 
+            
+            // นำตัวแปร numPattern มาต่อกัน 8 ชุด (เพราะตารางมี 8 คอลัมน์)
+            const rowRegex = new RegExp(`([a-zA-Z0-9][a-zA-Z0-9\\s\\,\\/\\.\\(\\)\\-]*?)\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}(?!\\s+-?\\d)`, "g");
             
             let match;
             while ((match = rowRegex.exec(summaryText)) !== null) {
                 let testName = match[1].trim();
                 
-                // เช็คว่าไม่ใช่ข้อความหัวตาราง
+                // เช็คว่าไม่ใช่ข้อความหัวตารางคำว่า Analyte
                 if(testName.toLowerCase() !== 'analyte' && testName !== '') {
                     tests.push({
-                        testName: testName,     // จะได้คำว่า CA 125, CA 15-3 เต็มๆ
-                        sdi: match[4]           // ดึงกลุ่มตัวเลขที่ 3 (คือ SDI) ได้อย่างแม่นยำ
+                        testName: testName,     // จะได้ชื่อ CA 125, CA 15-3 มาแบบสมบูรณ์
+                        sdi: match[4]           // ค่า SDI คือตัวเลขคอลัมน์ที่ 3 (ตรงกับตำแหน่งที่ 4 ใน match)
                     });
                 }
             }
