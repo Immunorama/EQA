@@ -96,33 +96,27 @@
         const issueDateMatch = text.match(/Issue Date:\s*([\d\/]+)/i);
         const issueDate = issueDateMatch ? issueDateMatch[1] : 'ไม่พบข้อมูล';
         
-        // --- 2. ดึงชื่อโปรแกรม EQA (อ่านจากข้อความที่อยู่ "เหนือ/ก่อน" CYCLE) ---
+        // --- 2. ดึงชื่อโปรแกรม EQA ---
         let eqaProgram = 'ไม่พบข้อมูลโปรแกรม';
-        // หาข้อความตัวพิมพ์ใหญ่ (และอาจมีเว้นวรรค) ที่อยู่ติดกับคำว่า CYCLE ด้านหน้า
         const programMatch = text.match(/([A-Z\s\&\-]+)\s+CYCLE\s+\d+/);
         if (programMatch) {
             eqaProgram = programMatch[1].trim();
         } else {
-            // กรณีหาไม่เจอ ให้คืนค่าพื้นฐานไว้ก่อน
             eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
         }
 
-        // --- 3. ดึงชื่อหน่วยงาน (อยู่ระหว่างคำว่า PAGE 1 กับ ชื่อโปรแกรม) ---
+        // --- 3. ดึงชื่อหน่วยงาน ---
         let labName = 'ไม่พบข้อมูลหน่วยงาน';
-        // ใช้ชื่อโปรแกรมที่ดึงมาได้ในข้อ 2 มาเป็นจุดสิ้นสุดการค้นหา
         const labNameRegex = new RegExp(`---\\s*PAGE\\s*1\\s*---\\s*(.+?)\\s+${eqaProgram}`, 'i');
         const labNameMatch = text.match(labNameRegex);
-        
         if (labNameMatch) {
             labName = labNameMatch[1].trim(); 
         } else {
-            // Fallback เผื่อจับข้อความไม่ได้
             labName = 'Ramathibodi Hospital (Immunology)';
         }
 
-        // --- 4. ดึงชื่อเครื่อง (อ่านจากข้อความที่อยู่ "ใต้/หลัง" LABORATORY REF. NO.) ---
+        // --- 4. ดึงชื่อเครื่อง ---
         let machineName = 'ไม่พบชื่อเครื่อง';
-        // ดึงข้อความต่อจาก REF. NO. (ตัด Reg(...) ออกถ้ามี) และไปหยุดที่คำว่า Authorised by
         const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*(?:Reg\s*\([A-Za-z]\)\s*-\s*)?([^"]+?)\s*(?="?Authorised by|"Authorised|Issue No)/i;
         const machineMatch = text.match(machineRegex);
         if (machineMatch) {
@@ -136,17 +130,19 @@
 
         if (summaryMatch) {
             const summaryText = summaryMatch[1];
-            // Regex หาบรรทัดข้อมูล: [ชื่อ Test] [ตัวเลข 8 คอลัมน์]
-            const rowRegex = /([A-Za-z0-9\s\-]+?)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)/g;
+            // Regex แก้ใหม่: เพิ่ม \. \, \/ เข้าไปในวงเล็บแรก เพื่อให้รองรับชื่อ Test แบบมีหน่วย (เช่น Prealbumin, mg/dl)
+            // ตัวเลขชุดที่ตามมามี 8 ชุด (Mean, Result, SDI, RMSDI, %DEV, RM%DEV, TS, RMTS)
+            const rowRegex = /([A-Za-z0-9\s\-\,\/\.]+?)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)/g;
             
             let match;
             while ((match = rowRegex.exec(summaryText)) !== null) {
                 let testName = match[1].trim();
-                // ข้ามบรรทัดที่เป็นหัวตารางคำว่า Analyte
+                
+                // เช็คว่าไม่ใช่ข้อความหัวตาราง
                 if(testName.toLowerCase() !== 'analyte' && testName !== '') {
                     tests.push({
-                        testName: testName,
-                        sdi: match[4] // ดึงค่าจากคอลัมน์ที่ 4 (SDI)
+                        testName: testName,     // ชื่อ Test จะรวมหน่วยมาด้วย
+                        sdi: match[4]           // ดึงกลุ่มตัวเลขที่ 3 (คือ SDI)
                     });
                 }
             }
