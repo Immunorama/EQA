@@ -125,12 +125,20 @@
             labName = 'Ramathibodi Hospital (Immunology)';
         }
 
-        // --- 4. ดึงชื่อเครื่อง ---
-        let machineName = 'ไม่พบชื่อเครื่อง';
-        const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*(?:Reg\s*\([A-Za-z]\)\s*-\s*)?([^"]+?)\s*(?="?Authorised by|"Authorised|Issue No)/i;
-        const machineMatch = text.match(machineRegex);
-        if (machineMatch) {
-            machineName = machineMatch[1].trim(); 
+       // --- 3. ดึงชื่อเครื่อง (Instrument) ---
+        let instrumentName = 'ไม่พบข้อมูลเครื่อง';
+        
+        // ค้นหารูปแบบที่ขึ้นต้นด้วย "Reg (ตัวอักษร)" เช่น Reg (A) - Roche Cobas และดึงมาทั้งบรรทัด
+        const instrumentMatch = text.match(/(Reg\s*\([A-Za-z]\)\s*-\s*[^\n]+)/i);
+        
+        if (instrumentMatch) {
+            instrumentName = instrumentMatch[1].trim(); 
+        } else {
+            // กรณีสำรอง: ถ้าไม่มีคำว่า Reg ให้ลองดึงบรรทัดที่อยู่ใต้ LABORATORY REF. NO. ลงมา 1 บรรทัด
+            const fallbackInstMatch = text.match(/LABORATORY\s+REF\.\s+NO\.\s+[\d\.]+\s*\n\s*([^\n]+)/i);
+            if (fallbackInstMatch) {
+                instrumentName = fallbackInstMatch[1].trim();
+            }
         }
 
         // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อัปเกรดให้รองรับข้อความ Too Few ในคอลัมน์) ---
