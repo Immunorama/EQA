@@ -98,10 +98,18 @@
         
         // --- 2. ดึงชื่อโปรแกรม EQA ---
         let eqaProgram = 'ไม่พบข้อมูลโปรแกรม';
-        const programMatch = text.match(/([A-Z\s\&\-]+)\s+CYCLE\s+\d+/);
+        
+        // อัปเดต Regex ให้รองรับตัวเลข (0-9) และรองรับโครงสร้างที่มีคำว่า LABORATORY REF. NO. คั่นกลาง
+        const programMatch = text.match(/([A-Za-z0-9\s\&\-\(\)]+?)\s*(?:LABORATORY REF\. NO\.\s*[\d\.]+\s*)?CYCLE\s*\d+/i);
+        
         if (programMatch) {
-            eqaProgram = programMatch[1].trim();
+            // ทำความสะอาดข้อความ เผื่อกรณี \s กวาดเอาบรรทัดด้านบน(ชื่อโรงพยาบาล)ติดมาด้วย
+            let rawProgramName = programMatch[1].trim();
+            let lines = rawProgramName.split('\n');
+            // เลือกเอาเฉพาะบรรทัดสุดท้ายที่ติดกับคำว่า CYCLE หรือ LAB REF (ซึ่งก็คือบรรทัดชื่อโปรแกรม)
+            eqaProgram = lines[lines.length - 1].trim(); 
         } else {
+            // ตัวสำรองเผื่อค้นหาไม่เจอ
             eqaProgram = text.includes('IMMUNOASSAY') ? 'IMMUNOASSAY' : 'ไม่พบข้อมูล';
         }
 
@@ -123,11 +131,10 @@
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อุดรอยรั่ว ป้องกันการดูดเลข 125) ---
+        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อัปเกรดให้รองรับข้อความ Too Few ในคอลัมน์) ---
         let tests = [];
         let summaryText = "";
         
-        // ตัดเอาเฉพาะข้อความส่วนตารางหน้าสุดท้าย
         const headerSplit = text.split(/RMTS\s+Performance/i);
         if (headerSplit.length > 1) {
             summaryText = headerSplit.pop(); 
@@ -137,16 +144,16 @@
         }
 
         if (summaryText) {
-            // เพิ่ม (?!\S) บังคับว่าตัวเลขที่จับได้ ต้องตามด้วยช่องว่างหรือการขึ้นบรรทัดใหม่เท่านั้น (ป้องกัน Backtrack ไปกินเลข 125)
-            const numPattern = "(-?\\d+(?:\\.\\d+)?)(?!\\S)";
-            const eightNumbersRegex = new RegExp(`\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}(?!\\s+-?\\d)`, "g");
+            // อัปเกรดรูปแบบให้จับได้ทั้ง "ตัวเลข" หรือ "Too Few" (ไม่สนตัวพิมพ์เล็ก-ใหญ่)
+            const valPattern = "(-?\\d+(?:\\.\\d+)?(?!\\S)|Too\\s+few)";
+            const eightColsRegex = new RegExp(`\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}(?!\\s+-?\\d)`, "gi");
             
             let match;
             let lastIndex = 0;
             
-            while ((match = eightNumbersRegex.exec(summaryText)) !== null) {
+            while ((match = eightColsRegex.exec(summaryText)) !== null) {
                 let beforeText = summaryText.substring(lastIndex, match.index);
-                lastIndex = eightNumbersRegex.lastIndex; 
+                lastIndex = eightColsRegex.lastIndex; 
                 
                 let words = beforeText.trim().split(/\s+/).filter(w => w.length > 0);
                 let testNameParts = [];
@@ -155,7 +162,6 @@
                     let word = words[i];
                     let wLower = word.toLowerCase();
                     
-                    // --- กฎการเตะเบรก (หยุดเมื่อเจอคำขยะ) ---
                     const exactBadWords = ['performance', 'rmts', 'ts', 'dev', 'rmsdi', 'sdi', 'result', 'your', 'comparison', 'for', 'mean', 'analyte', 'target', 'score', 'tdpa', 'acceptable', 'limits', 'biological', 'variation', 'n/a', 'riqas', 'derived', 'from', 'of', 'laboratories', 'laboratory', 'number', 'sd', 'cv', 'issue', 'page', 'report', 'the', 'assessment', 'accreditation', 'end'];
                     
                     const isExactBad = exactBadWords.includes(wLower);
@@ -164,8 +170,10 @@
                     const isScale = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/.test(wLower); 
                     const hasUnit = /\/ml|\/l|\/dl|iu\/|mmol|umol|ug|mg|ng/i.test(wLower); 
                     const hasDev = wLower.includes('dev'); 
+                    // ดักจับคำว่า Too หรือ Few เผื่อหลุดมาปนกับชื่อ Test
+                    const isTooFew = (wLower === 'too' || wLower === 'few');
                     
-                    if (isExactBad || hasPercent || hasSymbol || isScale || hasUnit || hasDev) {
+                    if (isExactBad || hasPercent || hasSymbol || isScale || hasUnit || hasDev || isTooFew) {
                         break;
                     }
                     
@@ -177,7 +185,7 @@
                 if(testName !== '') {
                     tests.push({
                         testName: testName,     
-                        sdi: match[3]           // คอลัมน์ที่ 3 คือ SDI 
+                        sdi: match[3] // คอลัมน์ที่ 3 คือค่า SDI ที่เราต้องการเสมอ
                     });
                 }
             }
