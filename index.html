@@ -81,7 +81,7 @@
         return fullText;
     }
 
- // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
+// 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
     function parseRIQASData(text) {
         // --- 1. ข้อมูลพื้นฐานทั่วไป ---
         const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
@@ -123,23 +123,22 @@
             machineName = machineMatch[1].trim(); 
         }
 
-        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อัปเกรดระบบล็อคเป้าตารางหน้าสุดท้าย) ---
+        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อุดรอยรั่ว ป้องกันการดูดเลข 125) ---
         let tests = [];
         let summaryText = "";
         
-        // แบ่งเอกสารด้วยหัวตารางคำว่า "RMTS Performance" เพื่อตัดปัญหาข้อความหลอกบนหน้า 2
+        // ตัดเอาเฉพาะข้อความส่วนตารางหน้าสุดท้าย
         const headerSplit = text.split(/RMTS\s+Performance/i);
-        
         if (headerSplit.length > 1) {
-            summaryText = headerSplit.pop(); // กวาดข้อความเฉพาะส่วนที่อยู่หลังหัวตาราง
+            summaryText = headerSplit.pop(); 
         } else {
             const fallbackSplit = text.split(/Analyte/i);
             summaryText = fallbackSplit.pop();
         }
 
         if (summaryText) {
-            // ดักจับกลุ่มตัวเลข 8 ชุด 
-            const numPattern = "(-?\\d+(?:\\.\\d+)?)";
+            // เพิ่ม (?!\S) บังคับว่าตัวเลขที่จับได้ ต้องตามด้วยช่องว่างหรือการขึ้นบรรทัดใหม่เท่านั้น (ป้องกัน Backtrack ไปกินเลข 125)
+            const numPattern = "(-?\\d+(?:\\.\\d+)?)(?!\\S)";
             const eightNumbersRegex = new RegExp(`\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}\\s+${numPattern}(?!\\s+-?\\d)`, "g");
             
             let match;
@@ -156,32 +155,29 @@
                     let word = words[i];
                     let wLower = word.toLowerCase();
                     
-                    // --- กฎการเตะเบรก (Stop Conditions) ---
-                    const exactBadWords = ['target', 'score', 'tdpa', 'acceptable', 'limits', 'biological', 'variation', 'n/a', 'performance', 'riqas', 'derived', 'from', 'for', 'of', 'laboratories', 'laboratory', 'number', 'analyte', 'mean', 'sd', 'cv', 'sdi', 'rmts', 'ts', 'rmsdi', 'dev', 'issue', 'page', 'report', 'the', 'assessment', 'accreditation'];
+                    // --- กฎการเตะเบรก (หยุดเมื่อเจอคำขยะ) ---
+                    const exactBadWords = ['performance', 'rmts', 'ts', 'dev', 'rmsdi', 'sdi', 'result', 'your', 'comparison', 'for', 'mean', 'analyte', 'target', 'score', 'tdpa', 'acceptable', 'limits', 'biological', 'variation', 'n/a', 'riqas', 'derived', 'from', 'of', 'laboratories', 'laboratory', 'number', 'sd', 'cv', 'issue', 'page', 'report', 'the', 'assessment', 'accreditation', 'end'];
                     
                     const isExactBad = exactBadWords.includes(wLower);
                     const hasPercent = wLower.includes('%'); 
                     const hasSymbol = /[<>=]/.test(wLower); 
-                    const isDecimal = /^\d+\.\d+$/.test(wLower); 
                     const isScale = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/.test(wLower); 
                     const hasUnit = /\/ml|\/l|\/dl|iu\/|mmol|umol|ug|mg|ng/i.test(wLower); 
                     const hasDev = wLower.includes('dev'); 
                     
-                    // ถ้าเข้าเงื่อนไขขยะ ให้หยุดดึงข้อความทันที
-                    if (isExactBad || hasPercent || hasSymbol || isDecimal || isScale || hasUnit || hasDev) {
+                    if (isExactBad || hasPercent || hasSymbol || isScale || hasUnit || hasDev) {
                         break;
                     }
                     
                     testNameParts.unshift(word);
                 }
                 
-                // นำคำมาต่อกันแล้วลบลูกน้ำส่วนเกินท้ายคำ (ถ้ามี)
                 let testName = testNameParts.join(' ').replace(/[,]+$/, '').trim();
                 
                 if(testName !== '') {
                     tests.push({
-                        testName: testName,     // จะได้ชื่อ Beta-2-Microglobulin
-                        sdi: match[3]           // คอลัมน์ที่ 3 คือ ค่า SDI
+                        testName: testName,     
+                        sdi: match[3]           // คอลัมน์ที่ 3 คือ SDI 
                     });
                 }
             }
