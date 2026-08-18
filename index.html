@@ -96,21 +96,23 @@
         const issueDateMatch = text.match(/Issue Date:\s*([\d\/]+)/i);
         const issueDate = issueDateMatch ? issueDateMatch[1] : 'ไม่พบข้อมูล';
         
-       // --- 2. ดึงชื่อโปรแกรม EQA ---
+      // --- 2. ดึงชื่อโปรแกรม EQA ---
         let eqaProgram = 'ไม่พบข้อมูลโปรแกรม';
         
-        // อัปเดต Regex ให้รองรับตัวเลข (0-9) และรองรับโครงสร้างที่มีคำว่า LABORATORY REF. NO. คั่นกลาง
-        const programMatch = text.match(/([A-Za-z0-9\s\&\-\(\)]+?)\s*(?:LABORATORY\s*REF\.\s*NO\.\s*[\d\.]+\s*)?CYCLE\s*\d+/i);
+        // บังคับหาเฉพาะ "ตัวพิมพ์ใหญ่ ตัวเลข และช่องว่าง" ที่อยู่หน้า LABORATORY REF. NO. 
+        // การไม่ใส่ flag 'i' จะทำให้ระบบหยุดอ่านทันทีเมื่อถอยไปเจอตัวพิมพ์เล็ก (เช่น ตัว l ใน Hospital)
+        const programMatch = text.match(/([A-Z0-9\&\-\(\)\s]+)\s+LABORATORY\s+REF\.\s+NO\.\s+[\d\.]+\s+CYCLE/);
         
         if (programMatch) {
-            // ทำความสะอาดข้อความ เผื่อกรณีมีการกวาดเอาบรรทัดด้านบนติดมาด้วย
-            let rawProgramName = programMatch[1].trim();
-            let lines = rawProgramName.split('\n');
-            // เลือกเอาเฉพาะบรรทัดสุดท้ายที่ติดกับคำว่า CYCLE หรือ LAB REF (ซึ่งก็คือบรรทัดชื่อโปรแกรม)
-            eqaProgram = lines[lines.length - 1].trim(); 
+            eqaProgram = programMatch[1].trim(); 
         } else {
-            // ตัวสำรองเผื่อค้นหาไม่เจอ
-            eqaProgram = text.includes('IMMUNOASSAY') ? 'IMMUNOASSAY' : 'ไม่พบข้อมูล';
+            // กรณีสำรอง เผื่อรูปแบบไฟล์ไม่มีคำว่า LABORATORY REF. NO. มาคั่น
+            const fallbackMatch = text.match(/([A-Z0-9\&\-\(\)\s]+)\s+CYCLE\s*\d+/);
+            if (fallbackMatch) {
+                eqaProgram = fallbackMatch[1].trim();
+            } else {
+                eqaProgram = text.includes('IMMUNOASSAY') ? 'IMMUNOASSAY' : 'ไม่พบข้อมูล';
+            }
         }
 
         // --- 3. ดึงชื่อหน่วยงาน ---
