@@ -50,19 +50,17 @@
     // === นำ Web App URL ที่ได้จาก GAS มาใส่ที่นี่ ===
     const GAS_URL = 'https://script.google.com/macros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec'; 
 
-    // ตั้งค่า Worker สำหรับไลบรารี PDF.js
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-    // เช็คเมื่อมีการเลือกไฟล์
     document.getElementById('pdfFile').addEventListener('change', function(e) {
         const file = e.target.files[0];
         const btn = document.getElementById('submitBtn');
         const statusDiv = document.getElementById('status');
         
-        statusDiv.style.display = 'none'; // ซ่อนสถานะเก่า
+        statusDiv.style.display = 'none';
 
         if (file) {
-            document.getElementById('fileNameDisplay').innerText = `ไฟลที่เลือก: ${file.name}`;
+            document.getElementById('fileNameDisplay').innerText = `ไฟล์ที่เลือก: ${file.name}`;
             btn.disabled = false;
         } else {
             document.getElementById('fileNameDisplay').innerText = 'ยังไม่ได้เลือกไฟล์';
@@ -70,7 +68,6 @@
         }
     });
 
-    // 1. ฟังก์ชันสกัดข้อความดิบทั้งหมดออกจาก PDF
     async function extractTextFromPDF(file) {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
@@ -84,9 +81,7 @@
         return fullText;
     }
 
-    // 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
     function parseRIQASData(text) {
-        // 1. ดึงข้อมูลพื้นฐานด้วย RegEx
         const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
         const labRefNo = labRefNoMatch ? labRefNoMatch[1] : 'ไม่พบข้อมูล';
         
@@ -101,51 +96,50 @@
         
         const eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
         
-        // ค้นหาชื่อหน่วยงาน (ตัวอย่างคือบรรทัดแรกๆ ของไฟล์)
         const labNameMatch = text.match(/^(.+?)\s+SPECIFIC PROTEINS/);
         let labName = labNameMatch ? labNameMatch[1].trim() : 'ไม่พบข้อมูลหน่วยงาน';
         if(labName.includes("PAGE")) {
-            // หากเผลอไปดึงติดคำว่า PAGE ให้ลบออก
             labName = labName.replace(/--- PAGE \d+ ---/, '').trim();
         }
 
-        // --- ส่วนที่ปรับปรุงใหม่ ---
-        
-        // 2. ดึงชื่อเครื่อง (อ่านจากข้อความที่อยู่ถัดจาก LABORATORY REF. NO.)
         let machineName = 'ไม่พบชื่อเครื่อง';
-        // มองหา LABORATORY REF. NO. ตามด้วยตัวเลข แล้วดึงข้อความที่อยู่ถัดไปก่อนจะถึงคำว่า "Authorised" หรือ "Issue"
         const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*(?:Reg\s*\([A-Za-z]\)\s*-\s*)?([^"]+?)\s*(?="?Authorised by|"Authorised|Issue No)/i;
         const machineMatch = text.match(machineRegex);
         if (machineMatch) {
-            machineName = machineMatch[1].trim(); // จะได้ค่าเช่น "Dade Dimension"
+            machineName = machineMatch[1].trim(); 
         }
 
-        // 3. ดึงค่า SDI จากหน้าสุดท้าย
-        let testName = 'C-Reactive Protein'; // กำหนดชื่อการทดสอบ
-        let sdi = 'ไม่พบข้อมูล';
-        
-        // สร้าง Pattern เพื่อหาตาราง: ชื่อ Test -> Mean -> Your Result -> SDI
-        // เราใช้ flag 'g' เพื่อหาคำนี้ "ทุกจุด" ในเอกสาร
-        const regexSDI = new RegExp(testName + "\\s+([\\d\\.]+)\\s+([\\d\\.]+)\\s+([\\d\\.\\-]+)", "g");
-        let match;
-        let lastMatch = null;
-        
-        // วนลูปเพื่อหาข้อมูล "ตัวสุดท้าย" ที่เจอในเอกสาร (ซึ่งก็คือตารางสรุปในหน้า 3)
-        while ((match = regexSDI.exec(text)) !== null) {
-            lastMatch = match;
-        }
-        
-        // ถ้าเจอข้อมูลในหน้าสุดท้าย
-        if (lastMatch) {
-            // lastMatch[1] คือ Mean
-            // lastMatch[2] คือ Your Result
-            sdi = lastMatch[3]; // กลุ่มที่ 3 คือค่า SDI
+        // --- ส่วนที่ดึงข้อมูลทุก Test จากตารางหน้าสุดท้าย ---
+        let tests = [];
+        const summaryRegex = /Performance\s+(.*?)(?:ORMSDI|END OF REPORT)/;
+        const summaryMatch = text.match(summaryRegex);
+
+        if (summaryMatch) {
+            const summaryText = summaryMatch[1];
+            // Regex หากลุ่มคำที่เป็นชื่อ Test ตามด้วยตัวเลข 8 ชุด
+            const rowRegex = /([A-Za-z0-9\s\-]+?)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)/g;
+            
+            let match;
+            while ((match = rowRegex.exec(summaryText)) !== null) {
+                let testName = match[1].trim();
+                // ป้องกันการจับคำว่า Analyte ที่เป็นหัวตาราง
+                if(testName.toLowerCase() !== 'analyte' && testName !== '') {
+                    tests.push({
+                        testName: testName,
+                        sdi: match[4] // จับค่าในคอลัมน์ SDI
+                    });
+                }
+            }
         }
 
-        return { labName, eqaProgram, labRefNo, machineName, issueDate, cycle, sample, testName, sdi };
+        // ถ้าหาไม่เจอจริงๆ ให้ส่งค่าเตือนไป
+        if (tests.length === 0) {
+            tests.push({ testName: 'ไม่พบข้อมูลการทดสอบ', sdi: '-' });
+        }
+
+        return { labName, eqaProgram, labRefNo, machineName, issueDate, cycle, sample, tests };
     }
 
-    // 3. เมื่อกดปุ่ม Submit
     document.getElementById('eqaForm').addEventListener('submit', async function(e) {
         e.preventDefault();
         
@@ -162,19 +156,16 @@
         statusDiv.style.color = '#0056b3';
 
         try {
-            // อ่าน Text จาก PDF
             const extractedText = await extractTextFromPDF(file);
             
-            // สกัดฟิลด์ข้อมูล
             statusDiv.innerText = '🔍 2/3 กำลังวิเคราะห์ข้อมูลและดึงค่า...';
             const parsedData = parseRIQASData(extractedText);
             
-            // แปลงไฟล์เป็น Base64
             const reader = new FileReader();
             reader.onload = function(event) {
                 const base64Data = event.target.result.split(',')[1]; 
 
-                // จัดเตรียม Payload ส่งให้ GAS
+                // ส่ง Array ของ Tests เข้าไปใน Payload
                 const payload = {
                     ...parsedData,
                     fileName: file.name,
@@ -184,7 +175,6 @@
 
                 statusDiv.innerText = '☁️ 3/3 กำลังบันทึกไฟล์และข้อมูลลง Google Sheets...';
 
-                // ส่ง API ไปบันทึก
                 fetch(GAS_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -194,12 +184,17 @@
                 .then(data => {
                     if (data.status === 'success') {
                         statusDiv.style.color = 'green';
-                        statusDiv.innerHTML = `✅ <b>บันทึกสำเร็จ! ข้อมูลที่ดึงได้:</b><br><br>
+                        
+                        // สร้างรายการ Test ที่ดึงมาได้เพื่อแสดงผลให้ User ดู
+                        let testsHTML = parsedData.tests.map(t => `• <b>${t.testName}</b> (SDI: ${t.sdi})`).join('<br>');
+                        
+                        statusDiv.innerHTML = `✅ <b>บันทึกสำเร็จทั้งหมด ${parsedData.tests.length} รายการ! ข้อมูลที่ดึงได้:</b><br><br>
                         • <b>Lab Ref:</b> ${parsedData.labRefNo}<br>
+                        • <b>เครื่อง:</b> ${parsedData.machineName}<br>
                         • <b>Cycle/Sample:</b> ${parsedData.cycle} / ${parsedData.sample}<br>
-                        • <b>Issue Date:</b> ${parsedData.issueDate}<br>
-                        • <b>Test Name:</b> ${parsedData.testName}<br>
-                        • <b>SDI:</b> ${parsedData.sdi}`;
+                        • <b>Issue Date:</b> ${parsedData.issueDate}<br><br>
+                        <b>รายการทดสอบที่บันทึก:</b><br>
+                        ${testsHTML}`;
                         
                         document.getElementById('eqaForm').reset();
                         document.getElementById('fileNameDisplay').innerText = 'ยังไม่ได้เลือกไฟล์';
@@ -218,13 +213,12 @@
                 });
             };
             
-            // เริ่มการอ่านไฟล์ Base64
             reader.readAsDataURL(file);
 
         } catch (error) {
             console.error(error);
             statusDiv.style.display = 'block';
-            statusDiv.innerText = '❌ ไม่สามารถอ่านตัวหนังสือจาก PDF นี้ได้ (อาจเป็นไฟล์ภาพที่ถูกแสกน)';
+            statusDiv.innerText = '❌ ไม่สามารถอ่านตัวหนังสือจาก PDF นี้ได้ (อาจเป็นไฟล์ภาพที่ถูกสแกน)';
             statusDiv.style.color = 'red';
             submitBtn.disabled = false;
             submitBtn.innerText = 'อ่านข้อมูลและบันทึก';
