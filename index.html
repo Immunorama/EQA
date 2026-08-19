@@ -21,11 +21,6 @@
         <div class="col-lg-10">
             <div class="card p-4 mb-4">
                 <h3 class="card-title text-primary fw-bold mb-3">📁 ระบบอัปโหลดและสกัดข้อมูล EQA (RIQAS)</h3>
-                
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">Google Apps Script Web App URL:</label>
-                    <input type="text" id="gasUrl" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
-                </div>
 
                 <div class="mb-3">
                     <label class="form-label fw-semibold">เลือกไฟล์ PDF รายงาน EQA:</label>
@@ -78,6 +73,12 @@
 </div>
 
 <script>
+    // ------------------------------------------------------------------------
+    // 📌 ใส่ Google Apps Script Web App URL ของคุณตรงนี้
+    // ------------------------------------------------------------------------
+    const GAS_URL = "https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec";
+    // ------------------------------------------------------------------------
+
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     let extractedData = null;
@@ -90,7 +91,6 @@
     const btnText = document.getElementById('btnText');
     const statusAlert = document.getElementById('statusAlert');
 
-    // ฟังก์ชันคืนค่าการหยุดพักให้ UI ได้ประมวลผล ไม่ให้หน้าเว็บ Response ไม่ทัน
     const yieldToUI = () => new Promise(resolve => setTimeout(resolve, 10));
 
     pdfFileInput.addEventListener('change', (e) => {
@@ -135,45 +135,44 @@
                 refNo: refMatch ? refMatch[1] : "",
                 machineName: machineName,
                 issueDate: dateMatch ? dateMatch[1] : "",
-                cycle: cycleSampleSampleMatch = cycleSampleMatch ? cycleSampleMatch[1] : "",
+                cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
                 sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
             };
 
-         // --- หน้า 2 เป็นต้นไป ---
-const rows = [];
-for (let i = 2; i <= pdf.numPages; i++) {
-    await yieldToUI();
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map(item => item.str).join(' ');
+            // --- หน้า 2 เป็นต้นไป ---
+            const rows = [];
+            for (let i = 2; i <= pdf.numPages; i++) {
+                await yieldToUI();
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
 
-    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-        let testName = "";
-        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
-        
-        if (testMatch) {
-            testName = testMatch[1]
-                .replace(/.*?Standard Deviation\s*/i, '') // ตัดข้อความ Standard Deviation และส่วนก่อนหน้าออก
-                .replace(/.*?IMMUNOASSAY\s*/i, '')         // ตัดชื่อโปรแกรมที่อาจติดมาออก
-                .replace(/^[\d\s\+\-\.]+/g, '')            // ตัดตัวเลข สัญลักษณ์ + - ด้านหน้าออก
-                .trim();
-        }
+                if (pageText.includes("Your Result") && pageText.includes("SDI")) {
+                    let testName = "";
+                    const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+                    if (testMatch) {
+                        testName = testMatch[1]
+                            .replace(/.*?Standard Deviation\s*/i, '')
+                            .replace(/.*?IMMUNOASSAY\s*/i, '')
+                            .replace(/^[\d\s\+\-\.]+/g, '')
+                            .trim();
+                    }
 
-        let sdi = "";
-        const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
-        if (sdiMatch) {
-            sdi = sdiMatch[1];
-        }
+                    let sdi = "";
+                    const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
+                    if (sdiMatch) {
+                        sdi = sdiMatch[1];
+                    }
 
-        if (testName && sdi) {
-            rows.push({
-                ...metadata,
-                testName: testName,
-                sdi: sdi
-            });
-        }
-    }
-}
+                    if (testName && sdi) {
+                        rows.push({
+                            ...metadata,
+                            testName: testName,
+                            sdi: sdi
+                        });
+                    }
+                }
+            }
 
             extractedData = { metadata, rows };
             displayPreview(extractedData);
@@ -212,7 +211,6 @@ for (let i = 2; i <= pdf.numPages; i++) {
         document.getElementById('previewCard').classList.remove('d-none');
     }
 
-    // แปลง File เป็น Base64 ด้วย Promise ป้องกันการหยุดการทำงาน
     const fileToBase64 = (file) => new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
@@ -222,10 +220,8 @@ for (let i = 2; i <= pdf.numPages; i++) {
 
     // 2. ส่งข้อมูลลง Google Apps Script
     uploadBtn.addEventListener('click', async () => {
-      //  const gasUrl = document.getElementById('gasUrl').value.trim();
-        const gasUrl = 'https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec';
-        if (!gasUrl) {
-            alert("กรุณากรอก Google Apps Script Web App URL ก่อนครับ");
+        if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
+            alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
             return;
         }
 
@@ -241,7 +237,7 @@ for (let i = 2; i <= pdf.numPages; i++) {
                 rows: extractedData.rows
             };
 
-            const response = await fetch(gasUrl, {
+            const response = await fetch(GAS_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload)
