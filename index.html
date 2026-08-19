@@ -58,6 +58,18 @@
             // 1-5. ดึงข้อมูลพื้นฐานหน่วยงาน
             const refMatch = fullText.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
             const labRef = refMatch ? refMatch[1] : '';
+            // ดึงชื่อเครื่อง (Registration Name / Instrument)
+            // ค้นหาข้อความที่อยู่ระหว่างเลข REF. NO. และคำว่า Ramathibodi
+            const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s+(.*?)\s+Ramathibodi Hospital/i;
+            const machineMatch = fullText.match(machineRegex);
+
+            let machineName = "Unknown";
+            if (machineMatch && machineMatch[1]) {
+            // ลบช่องว่างส่วนเกินออก
+            machineName = machineMatch[1].trim();
+            }
+
+            console.log("ชื่อเครื่องที่ดึงได้:", machineName);
 
             const machineMatch = fullText.match(/Reg\s*\([A-Z]\)\s*-\s*([^R]+?)\s+(?:Ramathibodi|IMMUNOASSAY)/i); 
             const machine = machineMatch ? machineMatch[1].trim() : (fullText.match(/Reg \([A-Z]\)\s*-\s*(.+)/) || [])[1];
