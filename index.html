@@ -3,220 +3,189 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบจัดเก็บผล EQA อัตโนมัติ</title>
+    <title>อัปโหลดผล EQA (RIQAS)</title>
+    <!-- เรียกใช้ PDF.js จาก CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;}
-        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
-        h2 { color: #333; margin-top: 0; }
-        p.subtitle { color: #666; font-size: 14px; margin-bottom: 30px; }
-        
-        .upload-area { position: relative; border: 2px dashed #007bff; background: #f8fbff; border-radius: 8px; padding: 40px 20px; cursor: pointer; transition: 0.3s; margin-bottom: 20px; }
-        .upload-area:hover { background: #eef5ff; border-color: #0056b3; }
-        .upload-area input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; height: 100%; width: 100%; }
-        .upload-icon { font-size: 40px; margin-bottom: 10px; }
-        .upload-text { font-size: 16px; font-weight: bold; color: #007bff; }
-        
-        #fileNameDisplay { margin-bottom: 20px; color: #333; font-weight: bold; font-size: 14px; word-break: break-all; }
-        
-        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        body { font-family: 'Sarabun', Tahoma, sans-serif; margin: 20px; background-color: #f4f7f6; }
+        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #333; }
+        .file-upload { display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px; }
+        label { font-weight: bold; }
+        input[type="file"] { padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
+        button { background: #28a745; color: white; border: none; padding: 12px; font-size: 16px; border-radius: 5px; cursor: pointer; font-weight: bold; }
         button:hover { background: #218838; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        
-        #status { margin-top: 20px; font-weight: bold; white-space: pre-wrap; font-size: 14px; text-align: left; background: #f9f9f9; padding: 15px; border-radius: 8px; display: none; }
+        button:disabled { background: #cccccc; cursor: not-allowed; }
+        #status { margin-top: 20px; font-weight: bold; text-align: center; color: #0056b3; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>ระบบจัดเก็บ EQA</h2>
-    <p class="subtitle">ระบบจะอ่านข้อมูลจาก PDF และบันทึกลงฐานข้อมูลอัตโนมัติ</p>
+    <h2>อัปโหลดและแยกข้อมูลผล EQA (RIQAS)</h2>
     
-    <form id="eqaForm">
-        <div class="upload-area">
-            <div class="upload-icon">📄</div>
-            <div class="upload-text">คลิกเพื่อเลือกไฟล์ PDF</div>
-            <input type="file" id="pdfFile" accept="application/pdf" required>
-        </div>
-        <div id="fileNameDisplay">ยังไม่ได้เลือกไฟล์</div>
-        
-        <button type="submit" id="submitBtn" disabled>อ่านข้อมูลและบันทึก</button>
-    </form>
-    
+    <div class="file-upload">
+        <label for="pdfFile">เลือกไฟล์ PDF:</label>
+        <input type="file" id="pdfFile" accept="application/pdf">
+        <button id="uploadBtn">แยกข้อมูลและส่งไปยัง Google Sheets</button>
+    </div>
+
     <div id="status"></div>
 </div>
 
 <script>
-    // === นำ Web App URL ที่ได้จาก GAS มาใส่ที่นี่ ===
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec'; 
-
+    // ตั้งค่า Worker ของ PDF.js
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-    document.getElementById('pdfFile').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        const btn = document.getElementById('submitBtn');
-        const statusDiv = document.getElementById('status');
-        
-        statusDiv.style.display = 'none';
+    // เปลี่ยนเป็น Web App URL ของคุณที่ได้จากการ Deploy Google Apps Script
+    const GOOGLE_APP_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec';
 
-        if (file) {
-            document.getElementById('fileNameDisplay').innerText = `ไฟล์ที่เลือก: ${file.name}`;
-            btn.disabled = false;
-        } else {
-            document.getElementById('fileNameDisplay').innerText = 'ยังไม่ได้เลือกไฟล์';
-            btn.disabled = true;
-        }
-    });
-
+    // ฟังก์ชันอ่านข้อความจาก PDF (แยกหน้าแรกและหน้าสุดท้าย)
     async function extractTextFromPDF(file) {
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+        
+        let firstPageText = '';
+        let lastPageText = '';
         let fullText = '';
+
         for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
+            // เว้นวรรคข้อความที่ติดกัน
             const pageText = textContent.items.map(item => item.str).join(' ');
+            
+            if (i === 1) firstPageText = pageText;
+            if (i === pdf.numPages) lastPageText = pageText;
+            
             fullText += pageText + ' ';
         }
-        return fullText;
+        
+        return { firstPageText, lastPageText, fullText, numPages: pdf.numPages };
     }
 
-    function parseRIQASData(text) {
-        const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
-        const labRefNo = labRefNoMatch ? labRefNoMatch[1] : 'ไม่พบข้อมูล';
+    // ฟังก์ชันใช้ Regex ดึงข้อมูล
+    function parseRIQASData(pdfTexts) {
+        const firstPage = pdfTexts.firstPageText;
+        const lastPage = pdfTexts.lastPageText;
         
-        const cycleMatch = text.match(/CYCLE\s*(\d+)/i);
-        const cycle = cycleMatch ? cycleMatch[1] : 'ไม่พบข้อมูล';
+        // 1. ดึงข้อมูลทั่วไปจากหน้าแรก
+        const labRefMatch = firstPage.match(/LABORATORY REF\.\s*NO\.\s*([\d\.]+)/i);
+        const cycleMatch = firstPage.match(/CYCLE\s*(\d+)/i);
+        const sampleMatch = firstPage.match(/SAMPLE\s*(\d+)/i);
+        const issueDateMatch = firstPage.match(/Issue Date:\s*([\d\/]+)/i);
         
-        const sampleMatch = text.match(/SAMPLE\s*(\d+)/i);
-        const sample = sampleMatch ? sampleMatch[1] : 'ไม่พบข้อมูล';
+        // ค้นหาชื่อโปรแกรม (ตัวอย่าง)
+        let eqaProgram = "ไม่ทราบโปรแกรม";
+        if (firstPage.toUpperCase().includes("SPECIFIC PROTEINS")) eqaProgram = "Specific Proteins";
+        else if (firstPage.toUpperCase().includes("CLINICAL CHEMISTRY")) eqaProgram = "Clinical Chemistry";
+        else if (firstPage.toUpperCase().includes("IMMUNOASSAY")) eqaProgram = "Immunoassay";
         
-        const issueDateMatch = text.match(/Issue Date:\s*([\d\/]+)/i);
-        const issueDate = issueDateMatch ? issueDateMatch[1] : 'ไม่พบข้อมูล';
-        
-        const eqaProgram = text.includes('SPECIFIC PROTEINS') ? 'SPECIFIC PROTEINS' : 'ไม่พบข้อมูล';
-        
-        // --- 1. กำหนดชื่อหน่วยงานตายตัว ---
-        const labName = 'Ramathibodi Hospital (Immunology)';
+        // ค้นหาชื่อเครื่องตรวจจากหน้าแรก (Regex อาจต้องปรับแต่งตามรูปแบบจริงใน PDF)
+        const machineMatch = firstPage.match(/Reg\s*\([A-Za-z]\)\s*-\s*(.+?)(?=\s*Authorised|\s*Issue|\s*Page)/i);
+        const machineName = machineMatch ? machineMatch[1].trim() : "ไม่พบชื่อเครื่องตรวจ";
 
-        // --- 2. ดึงชื่อเครื่อง ---
-        let machineName = 'ไม่พบชื่อเครื่อง';
-        const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*(?:Reg\s*\([A-Za-z]\)\s*-\s*)?([^"]+?)\s*(?="?Authorised by|"Authorised|Issue No)/i;
-        const machineMatch = text.match(machineRegex);
-        if (machineMatch) {
-            machineName = machineMatch[1].trim(); 
+        // 2. ดึงข้อมูลการทดสอบ (Tests) จากหน้าสุดท้าย
+        const tests = [];
+        // ค้นหาค่าในตารางสรุปผล (Summary table)
+        // สมมติว่าโครงสร้างคือ: Analyte | Mean for Comparison | Your Result | SDI | ...
+        // รูปแบบตัวเลขเช่น 229.667 227.000 -0.22
+        // Regex ตัวอย่าง (ดึงข้อความที่เป็นชื่อและตามด้วยกลุ่มตัวเลข)
+        const testRegex = /([A-Za-z0-9\s\-]+?)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)/g;
+        
+        // พยายามแยกส่วนเนื้อหาที่เป็นสรุปผล
+        let summarySection = lastPage;
+        const summaryMatch = lastPage.match(/Summary of Performance(.*)/i);
+        if (summaryMatch) {
+            summarySection = summaryMatch[1];
         }
 
-        // --- 3. ดึงข้อมูลทุก Test จากตารางหน้าสุดท้าย ---
-        let tests = [];
-        const summaryRegex = /Performance\s+(.*?)(?:ORMSDI|END OF REPORT)/;
-        const summaryMatch = text.match(summaryRegex);
-
-        if (summaryMatch) {
-            const summaryText = summaryMatch[1];
-            const rowRegex = /([A-Za-z0-9\s\-]+?)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)\s+([-\d\.]+)/g;
-            
-            let match;
-            while ((match = rowRegex.exec(summaryText)) !== null) {
-                let testName = match[1].trim();
-                if(testName.toLowerCase() !== 'analyte' && testName !== '') {
-                    tests.push({
-                        testName: testName,
-                        sdi: match[4]
-                    });
-                }
+        let match;
+        while ((match = testRegex.exec(summarySection)) !== null) {
+            let analyte = match[1].trim();
+            // กรองขยะหรือคำที่ไม่ใช่ Analyte ออก
+            if (analyte.length > 2 && !analyte.toLowerCase().includes("page") && !analyte.toLowerCase().includes("mean")) {
+                tests.push({
+                    testName: analyte,
+                    sdi: match[4] // สมมติว่า SDI อยู่ตำแหน่งที่ 4 ตามลักษณะตาราง
+                });
             }
         }
 
-        if (tests.length === 0) {
-            tests.push({ testName: 'ไม่พบข้อมูลการทดสอบ', sdi: '-' });
-        }
-
-        return { labName, eqaProgram, labRefNo, machineName, issueDate, cycle, sample, tests };
+        return {
+            labRefNo: labRefMatch ? labRefMatch[1] : "-",
+            cycle: cycleMatch ? cycleMatch[1] : "-",
+            sample: sampleMatch ? sampleMatch[1] : "-",
+            issueDate: issueDateMatch ? issueDateMatch[1] : "-",
+            eqaProgram: eqaProgram,
+            machineName: machineName,
+            tests: tests
+        };
     }
 
-    document.getElementById('eqaForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
+    // จัดการ Event เมื่อกดปุ่ม
+    document.getElementById('uploadBtn').addEventListener('click', async () => {
         const fileInput = document.getElementById('pdfFile');
-        const file = fileInput.files[0];
-        const submitBtn = document.getElementById('submitBtn');
         const statusDiv = document.getElementById('status');
+        const btn = document.getElementById('uploadBtn');
 
-        if (!file) return;
-
-        submitBtn.disabled = true;
-        statusDiv.style.display = 'block';
-        statusDiv.innerText = '⏳ 1/3 กำลังอ่านข้อมูลจาก PDF...';
-        statusDiv.style.color = '#0056b3';
+        if (fileInput.files.length === 0) {
+            alert('กรุณาเลือกไฟล์ PDF ก่อนครับ');
+            return;
+        }
 
         try {
-            const extractedText = await extractTextFromPDF(file);
-            
-            statusDiv.innerText = '🔍 2/3 กำลังวิเคราะห์ข้อมูลและดึงค่า...';
-            const parsedData = parseRIQASData(extractedText);
-            
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const base64Data = event.target.result.split(',')[1]; 
+            btn.disabled = true;
+            statusDiv.textContent = 'กำลังอ่านไฟล์ PDF...';
+            statusDiv.style.color = '#0056b3';
 
-                // ส่ง Array ของ Tests เข้าไปใน Payload
-                const payload = {
-                    ...parsedData,
-                    fileName: file.name,
-                    fileType: file.type,
-                    fileBase64: base64Data
-                };
-
-                statusDiv.innerText = '☁️ 3/3 กำลังบันทึกไฟล์และข้อมูลลง Google Sheets...';
-
-                fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        statusDiv.style.color = 'green';
-                        
-                        // สร้างรายการ Test ที่ดึงมาได้เพื่อแสดงผลให้ User ดู
-                        let testsHTML = parsedData.tests.map(t => `• <b>${t.testName}</b> (SDI: ${t.sdi})`).join('<br>');
-                        
-                        statusDiv.innerHTML = `✅ <b>บันทึกสำเร็จทั้งหมด ${parsedData.tests.length} รายการ! ข้อมูลที่ดึงได้:</b><br><br>
-                        • <b>Lab Ref:</b> ${parsedData.labRefNo}<br>
-                        • <b>เครื่อง:</b> ${parsedData.machineName}<br>
-                        • <b>Cycle/Sample:</b> ${parsedData.cycle} / ${parsedData.sample}<br>
-                        • <b>Issue Date:</b> ${parsedData.issueDate}<br><br>
-                        <b>รายการทดสอบที่บันทึก:</b><br>
-                        ${testsHTML}`;
-                        
-                        document.getElementById('eqaForm').reset();
-                        document.getElementById('fileNameDisplay').innerText = 'ยังไม่ได้เลือกไฟล์';
-                    } else {
-                        statusDiv.innerText = '❌ เกิดข้อผิดพลาดฝั่งเซิร์ฟเวอร์: ' + data.message;
-                        statusDiv.style.color = 'red';
-                    }
-                })
-                .catch(err => {
-                    statusDiv.innerText = '❌ เกิดข้อผิดพลาดในการเชื่อมต่อ (CORS หรือ URL ผิด)';
-                    statusDiv.style.color = 'red';
-                })
-                .finally(() => {
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = 'อ่านข้อมูลและบันทึก';
-                });
-            };
+            const file = fileInput.files[0];
             
-            reader.readAsDataURL(file);
+            // อ่านข้อความ (แยกหน้า)
+            const extractedData = await extractTextFromPDF(file);
+            
+            statusDiv.textContent = 'กำลังแยกข้อมูล (Parsing)...';
+            
+            // ประมวลผลข้อมูล
+            const parsedData = parseRIQASData(extractedData);
+            
+            console.log('ข้อมูลที่ดึงได้:', parsedData);
+
+            if (parsedData.tests.length === 0) {
+                statusDiv.textContent = 'ดึงข้อมูลสำเร็จ แต่ไม่พบรายการ Test (โปรดตรวจสอบ Regex หรือรูปแบบ PDF)';
+                statusDiv.style.color = '#ff9800';
+                btn.disabled = false;
+                return; // อาจจะใส่ return หรือยอมให้ส่งข้อมูลไปโดยที่ tests เป็นอาร์เรย์ว่างก็ได้
+            }
+
+            statusDiv.textContent = 'กำลังส่งข้อมูลไปยัง Google Sheets...';
+
+            // ส่งข้อมูลไปยัง Google Apps Script
+            const response = await fetch(GOOGLE_APP_SCRIPT_URL, {
+                method: 'POST',
+                // หากติดปัญหา CORS ให้ใช้ 'text/plain' แล้วค่อย JSON.parse ที่ฝั่ง Server
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8', 
+                },
+                body: JSON.stringify(parsedData)
+            });
+
+            const result = await response.json();
+
+            if (result.status === 'success') {
+                statusDiv.textContent = '✅ บันทึกข้อมูลเรียบร้อยแล้ว!';
+                statusDiv.style.color = '#28a745';
+                fileInput.value = ''; // เคลียร์ช่องเลือกไฟล์
+            } else {
+                throw new Error(result.message || 'เกิดข้อผิดพลาดจากฝั่ง Server');
+            }
 
         } catch (error) {
-            console.error(error);
-            statusDiv.style.display = 'block';
-            statusDiv.innerText = '❌ ไม่สามารถอ่านตัวหนังสือจาก PDF นี้ได้ (อาจเป็นไฟล์ภาพที่ถูกสแกน)';
-            statusDiv.style.color = 'red';
-            submitBtn.disabled = false;
-            submitBtn.innerText = 'อ่านข้อมูลและบันทึก';
+            console.error('Error:', error);
+            statusDiv.textContent = '❌ เกิดข้อผิดพลาด: ' + error.message;
+            statusDiv.style.color = '#dc3545';
+        } finally {
+            btn.disabled = false;
         }
     });
 </script>
