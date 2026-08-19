@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <title>EQA PDF Uploader & Extractor</title>
-    <!-- นำเข้าไลบรารี pdf.js สำหรับอ่าน PDF -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; padding: 20px; }
@@ -38,82 +37,69 @@
     </div>
 
     <script>
-        // ตั้งค่า Worker ของ pdf.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-
-        let extractedPayload = {}; // เก็บข้อมูลเตรียมส่งให้ GAS
+        let extractedPayload = {}; 
 
         async function processPDF() {
             const file = document.getElementById('pdfFile').files[0];
             if (!file) return;
 
-            // อ่านไฟล์ PDF
             const arrayBuffer = await file.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
             
             let fullText = "";
-            
-            // วนลูปอ่านข้อความจากทุกหน้า
             for (let i = 1; i <= pdf.numPages; i++) {
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
-                // นำคำมาต่อกันโดยใช้การขึ้นบรรทัดใหม่และช่องว่าง เพื่อรักษาโครงสร้างของเอกสาร
                 const pageText = textContent.items.map(item => item.str).join(" ");
                 fullText += pageText + "\n";
             }
 
-            // === ส่วนการใช้ REGEX ดึงข้อมูลตามเงื่อนไข ===
-            
-            // 1. LAB REF. NO. เช่น 222557.5
+            // 1-5. ดึงข้อมูลพื้นฐานหน่วยงาน
             const refMatch = fullText.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
             const labRef = refMatch ? refMatch[1] : '';
 
-            // 2. ชื่อเครื่อง (ตามหลัง Reg (B) -)
             const machineMatch = fullText.match(/Reg\s*\([A-Z]\)\s*-\s*([^R]+?)\s+(?:Ramathibodi|IMMUNOASSAY)/i); 
-            // หากหาจากเครื่องอื่นที่ไม่ได้ชื่อ Ramathibodi ให้ใช้: /Reg \([A-Z]\)\s*-\s*(.+?)\s+(?=[A-Z][a-z]+)/
             const machine = machineMatch ? machineMatch[1].trim() : (fullText.match(/Reg \([A-Z]\)\s*-\s*(.+)/) || [])[1];
 
-            // 3. Cycle & Sample[cite: 3]
             const cycleMatch = fullText.match(/CYCLE\s+(\d+)\s+SAMPLE\s+(\d+)/);
             const cycle = cycleMatch ? cycleMatch[1] : '';
             const sample = cycleMatch ? cycleMatch[2] : '';
 
-            // 4. Issue Date[cite: 3]
             const dateMatch = fullText.match(/Issue Date:\s*([\d\/]+)/);
             const issueDate = dateMatch ? dateMatch[1] : '';
 
-            // 5. ดึงชื่อหน่วยงานและโปรแกรม (ส่วนใหญ่อยู่บรรทัดถัดจากเครื่อง)[cite: 3]
-            // เนื่องจาก pdf.js อาจทำให้บรรทัดปนกัน จึงใช้การอนุมานคำว่า IMMUNOASSAY
             const programMatch = fullText.match(/(IMMUNOASSAY)/);
             const program = programMatch ? programMatch[1] : 'IMMUNOASSAY';
             
-            // ดึงหน่วยงานโดยหาข้อความระหว่างชื่อเครื่องกับคำว่า IMMUNOASSAY[cite: 3]
-            let department = "Ramathibodi Hospital (Immunology)"; // สามารถปรับเป็น input กรอกมือได้ถ้าหาอัตโนมัติไม่เจอ
+            let department = "Ramathibodi Hospital (Immunology)"; 
             if(machine && fullText.includes(machine) && fullText.includes("IMMUNOASSAY")) {
                 const textBetween = fullText.split(machine)[1].split("IMMUNOASSAY")[0];
                 if(textBetween.trim().length > 5) department = textBetween.trim();
             }
 
-            // 6. ดึงชื่อการทดสอบ (หน้าเครื่องหมาย ,) และค่า SDI (หลัง SDI) 
-            // Regex นี้ค้นหารูปแบบ "ชื่อ, หน่วย ... จนถึง Your Result [ค่า] SDI [ค่า]"
+            // 6. ดึงชื่อการทดสอบ และค่า SDI (อัปเดต Regex ใหม่: หาหลังคำว่า Deviation)
             const testsData = [];
-            const testRegex = /([A-Za-z0-9\-\s]+?)\s*,\s*[a-zA-Z]+\/[a-zA-Z]+[\s\S]*?Your Result\s+[\d\.]+\s+SDI\s*(-?[\d\.]+)/g;
+            // Regex หาคำว่า Deviation นำหน้า -> ตามด้วยชื่อการทดสอบ -> คอมม่า -> Your Result -> SDI
+            const testRegex = /Deviation[\s\S]*?([A-Za-z0-9\-\s]+?)\s*,\s*[a-zA-Z0-9]+\/[a-zA-Z0-9]+[\s\S]*?Your Result\s+[\d\.]+\s+SDI\s*(-?[\d\.]+)/gi;
             let match;
             
             while ((match = testRegex.exec(fullText)) !== null) {
                 let tName = match[1].trim();
-                // กรองเอาเฉพาะคำลงท้ายที่น่าจะเป็นชื่อเทสต์ (เผื่อ pdf.js ดึงข้อความอื่นติดมา)
+                // สกัดเอาเฉพาะชื่อเทสต์ที่อยู่ติดกับคอมม่า (กรองข้อความขยะที่อาจติดมาจาก pdf.js)
                 let nameParts = tName.split(/\s+/);
-                if(nameParts.length > 3) tName = nameParts.slice(-3).join(" "); 
+                if(nameParts.length > 3) {
+                    // เลือกมาเฉพาะ 2-3 คำสุดท้ายที่เป็นชื่อจริงๆ เช่น CA 125 หรือ CA 15-3
+                    tName = nameParts.slice(-3).join(" "); 
+                }
 
                 testsData.push({ testName: tName, sdi: match[2].trim() });
             }
 
-            // === เตรียมข้อมูลและแสดงผล Preview ===
+            // นำข้อมูลเข้าสู่ Object เตรียมส่งให้ GAS
             extractedPayload.commonData = { labRef, machine, department, program, cycle, sample, issueDate };
             extractedPayload.testsData = testsData;
             
-            // อ่านไฟล์เป็น Base64 เพื่อเตรียมส่งให้ GAS
             const reader = new FileReader();
             reader.onload = function(e) {
                 extractedPayload.fileName = file.name;
@@ -122,7 +108,7 @@
             };
             reader.readAsDataURL(file);
 
-            // แสดงในหน้าเว็บ
+            // แสดง Preview บนหน้าเว็บ
             document.getElementById('p-ref').innerText = labRef;
             document.getElementById('p-machine').innerText = machine;
             document.getElementById('p-dept').innerText = department;
@@ -132,7 +118,7 @@
             document.getElementById('p-date').innerText = issueDate;
 
             const table = document.getElementById('testsTable');
-            table.innerHTML = '<tr><th>ชื่อการทดสอบ</th><th>SDI</th></tr>'; // ล้างข้อมูลเก่า
+            table.innerHTML = '<tr><th>ชื่อการทดสอบ</th><th>SDI</th></tr>';
             testsData.forEach(t => {
                 table.innerHTML += `<tr><td>${t.testName}</td><td>${t.sdi}</td></tr>`;
             });
@@ -145,8 +131,7 @@
             btn.innerText = "กำลังอัปโหลด...";
             btn.disabled = true;
 
-            // เอา URL ของ Web App GAS ของคุณมาใส่ที่นี่
-            const gasUrl = "https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec"; 
+            const gasUrl = "https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec"; // <--- อย่าลืมนำ URL ใหม่ของคุณมาวางตรงนี้
 
             fetch(gasUrl, {
                 method: 'POST',
@@ -154,7 +139,7 @@
             })
             .then(response => response.json())
             .then(data => {
-                alert("บันทึกข้อมูลเรียบร้อยแล้ว! ดูไฟล์ได้ที่: " + data.url);
+                alert("บันทึกข้อมูลเรียบร้อยแล้ว!");
                 btn.innerText = "ยืนยันและบันทึกลง Google Sheet";
                 btn.disabled = false;
             })
