@@ -3,295 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบจัดเก็บผล EQA อัตโนมัติ</title>
+    <title>อ่านข้อมูล RIQAS PDF</title>
+    <!-- นำเข้าไลบรารี PDF.js ผ่าน CDN -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box;}
-        .container { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); text-align: center; max-width: 450px; width: 100%; }
-        h2 { color: #333; margin-top: 0; }
-        p.subtitle { color: #666; font-size: 14px; margin-bottom: 30px; }
-        
-        .upload-area { position: relative; border: 2px dashed #007bff; background: #f8fbff; border-radius: 8px; padding: 40px 20px; cursor: pointer; transition: 0.3s; margin-bottom: 20px; }
-        .upload-area:hover { background: #eef5ff; border-color: #0056b3; }
-        .upload-area input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; height: 100%; width: 100%; }
-        .upload-icon { font-size: 40px; margin-bottom: 10px; }
-        .upload-text { font-size: 16px; font-weight: bold; color: #007bff; }
-        
-        #fileNameDisplay { margin-bottom: 20px; color: #333; font-weight: bold; font-size: 14px; word-break: break-all; }
-        
-        button { width: 100%; padding: 15px; background: #28a745; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #218838; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        
-        #status { margin-top: 20px; font-weight: bold; white-space: pre-wrap; font-size: 14px; text-align: left; background: #f9f9f9; padding: 15px; border-radius: 8px; display: none; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #333;
+        }
+        input[type="file"] {
+            margin-bottom: 20px;
+        }
+        #result {
+            background-color: #2d2d2d;
+            color: #4af626;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            min-height: 100px;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>ระบบจัดเก็บ EQA</h2>
-    <p class="subtitle">ระบบจะอ่านข้อมูลจาก PDF และบันทึกลงฐานข้อมูลอัตโนมัติ</p>
+    <h2>โปรแกรมดึงข้อมูล RIQAS จาก PDF</h2>
+    <p>กรุณาเลือกไฟล์ PDF เพื่อทำการสกัดข้อมูล</p>
     
-    <form id="eqaForm">
-        <div class="upload-area">
-            <div class="upload-icon">📄</div>
-            <div class="upload-text">คลิกเพื่อเลือกไฟล์ PDF</div>
-            <input type="file" id="pdfFile" accept="application/pdf" required>
-        </div>
-        <div id="fileNameDisplay">ยังไม่ได้เลือกไฟล์</div>
-        
-        <button type="submit" id="submitBtn" disabled>อ่านข้อมูลและบันทึก</button>
-    </form>
+    <!-- ปุ่มอัปโหลดไฟล์ -->
+    <input type="file" id="pdf-upload" accept="application/pdf">
     
-    <div id="status"></div>
+    <h3>ผลลัพธ์:</h3>
+    <!-- พื้นที่แสดงผลลัพธ์ -->
+    <pre id="result">รอรับไฟล์...</pre>
 </div>
 
 <script>
-    // === นำ Web App URL ที่ได้จาก GAS มาใส่ที่นี่ ===
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec'; 
+    // ตั้งค่า Worker ของ PDF.js
+    const pdfjsLib = window['pdfjs-dist/build/pdf'];
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    const fileInput = document.getElementById('pdf-upload');
+    const resultBox = document.getElementById('result');
 
-    document.getElementById('pdfFile').addEventListener('change', function(e) {
+    // เมื่อผู้ใช้เลือกไฟล์
+    fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
-        const btn = document.getElementById('submitBtn');
-        const statusDiv = document.getElementById('status');
-        
-        statusDiv.style.display = 'none';
-
-        if (file) {
-            document.getElementById('fileNameDisplay').innerText = `ไฟล์ที่เลือก: ${file.name}`;
-            btn.disabled = false;
-        } else {
-            document.getElementById('fileNameDisplay').innerText = 'ยังไม่ได้เลือกไฟล์';
-            btn.disabled = true;
+        if (file.type !== 'application/pdf') {
+            resultBox.textContent = 'กรุณาอัปโหลดไฟล์ PDF เท่านั้นครับ';
+            return;
         }
+
+        resultBox.textContent = 'กำลังประมวลผล...';
+
+        const fileReader = new FileReader();
+        
+        fileReader.onload = async function() {
+            try {
+                // แปลงไฟล์เป็น ArrayBuffer
+                const typedarray = new Uint8Array(this.result);
+
+                // โหลด PDF ด้วย PDF.js
+                const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                let fullText = '';
+
+                // วนลูปอ่านทีละหน้า
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += pageText + '\n';
+                }
+
+                // สกัดข้อมูลด้วย Regex (เหมือนใน Node.js)
+                const data = parseRIQASData(fullText);
+                
+                // แสดงผลลัพธ์บนหน้าจอ
+                resultBox.textContent = JSON.stringify(data, null, 4);
+
+            } catch (error) {
+                console.error(error);
+                resultBox.textContent = 'เกิดข้อผิดพลาดในการอ่านไฟล์: ' + error.message;
+            }
+        };
+
+        fileReader.readAsArrayBuffer(file);
     });
 
-    async function extractTextFromPDF(file) {
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
-        let fullText = '';
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map(item => item.str).join(' ');
-            fullText += pageText + ' ';
-        }
-        return fullText;
-    }
-
-// 2. ฟังก์ชันวิเคราะห์ข้อมูล (อ่านค่าตาม Format ของ RIQAS)
+    // ฟังก์ชันสำหรับใช้ Regex สกัดข้อความ
     function parseRIQASData(text) {
-        // --- 1. ข้อมูลพื้นฐานทั่วไป ---
-        const labRefNoMatch = text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
-        const labRefNo = labRefNoMatch ? labRefNoMatch[1] : 'ไม่พบข้อมูล';
-        
-        const cycleMatch = text.match(/CYCLE\s*(\d+)/i);
-        const cycle = cycleMatch ? cycleMatch[1] : 'ไม่พบข้อมูล';
-        
-        const sampleMatch = text.match(/SAMPLE\s*(\d+)/i);
-        const sample = sampleMatch ? sampleMatch[1] : 'ไม่พบข้อมูล';
-        
+        const labRefMatch = text.match(/LABORATORY\s+REF\.\s+NO\.\s*([\d\.]+)/i);
+        const instrumentMatch = text.match(/(Reg\s*\([A-Za-z]\)\s*-\s*[^\n\r]+)/i);
+        const hospitalMatch = text.match(/(Faculty of Medicine [^\n\r]+)/i);
+        const programMatch = text.match(/(IMMUNOASSAY SPECIALITY \d+)/i);
+        const cycleSampleMatch = text.match(/CYCLE\s+(\d+)\s+SAMPLE\s+(\d+)/i);
         const issueDateMatch = text.match(/Issue Date:\s*([\d\/]+)/i);
-        const issueDate = issueDateMatch ? issueDateMatch[1] : 'ไม่พบข้อมูล';
-        
-      // --- 2. ดึงชื่อโปรแกรม EQA ---
-        let eqaProgram = 'ไม่พบข้อมูลโปรแกรม';
-        
-        // บังคับหาเฉพาะ "ตัวพิมพ์ใหญ่ ตัวเลข และช่องว่าง" ที่อยู่หน้า LABORATORY REF. NO. 
-        // การไม่ใส่ flag 'i' จะทำให้ระบบหยุดอ่านทันทีเมื่อถอยไปเจอตัวพิมพ์เล็ก (เช่น ตัว l ใน Hospital)
-        const programMatch = text.match(/([A-Z0-9\&\-\(\)\s]+)\s+LABORATORY\s+REF\.\s+NO\.\s+[\d\.]+\s+CYCLE/);
-        
-        if (programMatch) {
-            eqaProgram = programMatch[1].trim(); 
-        } else {
-            // กรณีสำรอง เผื่อรูปแบบไฟล์ไม่มีคำว่า LABORATORY REF. NO. มาคั่น
-            const fallbackMatch = text.match(/([A-Z0-9\&\-\(\)\s]+)\s+CYCLE\s*\d+/);
-            if (fallbackMatch) {
-                eqaProgram = fallbackMatch[1].trim();
-            } else {
-                eqaProgram = text.includes('IMMUNOASSAY') ? 'IMMUNOASSAY' : 'ไม่พบข้อมูล';
-            }
-        }
 
-        // --- 3. ดึงชื่อหน่วยงาน ---
-        let labName = 'ไม่พบข้อมูลหน่วยงาน';
-        const labNameRegex = new RegExp(`---\\s*PAGE\\s*1\\s*---\\s*(.+?)\\s+${eqaProgram}`, 'i');
-        const labNameMatch = text.match(labNameRegex);
-        if (labNameMatch) {
-            labName = labNameMatch[1].trim(); 
-        } else {
-            labName = 'Ramathibodi Hospital (Immunology)';
-        }
-
-       // --- 3. ดึงชื่อเครื่อง (Instrument) ---
-        let instrumentName = 'ไม่พบข้อมูลเครื่อง';
-        
-        // ค้นหารูปแบบที่ขึ้นต้นด้วย "Reg (ตัวอักษร)" เช่น Reg (A) - Roche Cobas และดึงมาทั้งบรรทัด
-        const instrumentMatch = text.match(/(Reg\s*\([A-Za-z]\)\s*-\s*[^\n]+)/i);
-        
-        if (instrumentMatch) {
-            instrumentName = instrumentMatch[1].trim(); 
-        } else {
-            // กรณีสำรอง: ถ้าไม่มีคำว่า Reg ให้ลองดึงบรรทัดที่อยู่ใต้ LABORATORY REF. NO. ลงมา 1 บรรทัด
-            const fallbackInstMatch = text.match(/LABORATORY\s+REF\.\s+NO\.\s+[\d\.]+\s*\n\s*([^\n]+)/i);
-            if (fallbackInstMatch) {
-                instrumentName = fallbackInstMatch[1].trim();
-            }
-        }
-
-        // --- 5. ดึงข้อมูลทุก Test และค่า SDI (อัปเกรดให้รองรับข้อความ Too Few ในคอลัมน์) ---
-        let tests = [];
-        let summaryText = "";
-        
-        const headerSplit = text.split(/RMTS\s+Performance/i);
-        if (headerSplit.length > 1) {
-            summaryText = headerSplit.pop(); 
-        } else {
-            const fallbackSplit = text.split(/Analyte/i);
-            summaryText = fallbackSplit.pop();
-        }
-
-        if (summaryText) {
-            // อัปเกรดรูปแบบให้จับได้ทั้ง "ตัวเลข" หรือ "Too Few" (ไม่สนตัวพิมพ์เล็ก-ใหญ่)
-            const valPattern = "(-?\\d+(?:\\.\\d+)?(?!\\S)|Too\\s+few)";
-            const eightColsRegex = new RegExp(`\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}\\s+${valPattern}(?!\\s+-?\\d)`, "gi");
-            
-            let match;
-            let lastIndex = 0;
-            
-            while ((match = eightColsRegex.exec(summaryText)) !== null) {
-                let beforeText = summaryText.substring(lastIndex, match.index);
-                lastIndex = eightColsRegex.lastIndex; 
-                
-                let words = beforeText.trim().split(/\s+/).filter(w => w.length > 0);
-                let testNameParts = [];
-                
-                for (let i = words.length - 1; i >= 0; i--) {
-                    let word = words[i];
-                    let wLower = word.toLowerCase();
-                    
-                    const exactBadWords = ['performance', 'rmts', 'ts', 'dev', 'rmsdi', 'sdi', 'result', 'your', 'comparison', 'for', 'mean', 'analyte', 'target', 'score', 'tdpa', 'acceptable', 'limits', 'biological', 'variation', 'n/a', 'riqas', 'derived', 'from', 'of', 'laboratories', 'laboratory', 'number', 'sd', 'cv', 'issue', 'page', 'report', 'the', 'assessment', 'accreditation', 'end'];
-                    
-                    const isExactBad = exactBadWords.includes(wLower);
-                    const hasPercent = wLower.includes('%'); 
-                    const hasSymbol = /[<>=]/.test(wLower); 
-                    const isScale = /^(0|10|20|30|40|50|60|70|80|90|100|110|120|130|140|150|160|170|180|190|200)$/.test(wLower); 
-                    const hasUnit = /\/ml|\/l|\/dl|iu\/|mmol|umol|ug|mg|ng/i.test(wLower); 
-                    const hasDev = wLower.includes('dev'); 
-                    // ดักจับคำว่า Too หรือ Few เผื่อหลุดมาปนกับชื่อ Test
-                    const isTooFew = (wLower === 'too' || wLower === 'few');
-                    
-                    if (isExactBad || hasPercent || hasSymbol || isScale || hasUnit || hasDev || isTooFew) {
-                        break;
-                    }
-                    
-                    testNameParts.unshift(word);
-                }
-                
-                let testName = testNameParts.join(' ').replace(/[,]+$/, '').trim();
-                
-                if(testName !== '') {
-                    tests.push({
-                        testName: testName,     
-                        sdi: match[3] // คอลัมน์ที่ 3 คือค่า SDI ที่เราต้องการเสมอ
-                    });
-                }
-            }
-        }
-
-        if (tests.length === 0) {
-            tests.push({ testName: 'ไม่พบข้อมูลการทดสอบ', sdi: '-' });
-        }
-
-        return { labName, eqaProgram, labRefNo, machineName, issueDate, cycle, sample, tests };
+        return {
+            labRefNo: labRefMatch ? labRefMatch[1].trim() : "ไม่พบข้อมูล",
+            instrumentName: instrumentMatch ? instrumentMatch[1].trim() : "ไม่พบข้อมูล",
+            hospital: hospitalMatch ? hospitalMatch[1].trim() : "ไม่พบข้อมูล",
+            program: programMatch ? programMatch[1].trim() : "ไม่พบข้อมูล",
+            cycle: cycleSampleMatch ? cycleSampleMatch[1] : "ไม่พบข้อมูล",
+            sample: cycleSampleMatch ? cycleSampleMatch[2] : "ไม่พบข้อมูล",
+            issueDate: issueDateMatch ? issueDateMatch[1] : "ไม่พบข้อมูล",
+        };
     }
-        
-    document.getElementById('eqaForm').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const fileInput = document.getElementById('pdfFile');
-        const file = fileInput.files[0];
-        const submitBtn = document.getElementById('submitBtn');
-        const statusDiv = document.getElementById('status');
-
-        if (!file) return;
-
-        submitBtn.disabled = true;
-        statusDiv.style.display = 'block';
-        statusDiv.innerText = '⏳ 1/3 กำลังอ่านข้อมูลจาก PDF...';
-        statusDiv.style.color = '#0056b3';
-
-        try {
-            const extractedText = await extractTextFromPDF(file);
-            
-            statusDiv.innerText = '🔍 2/3 กำลังวิเคราะห์ข้อมูลและดึงค่า...';
-            const parsedData = parseRIQASData(extractedText);
-            
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                const base64Data = event.target.result.split(',')[1]; 
-
-                // ส่ง Array ของ Tests เข้าไปใน Payload
-                const payload = {
-                    ...parsedData,
-                    fileName: file.name,
-                    fileType: file.type,
-                    fileBase64: base64Data
-                };
-
-                statusDiv.innerText = '☁️ 3/3 กำลังบันทึกไฟล์และข้อมูลลง Google Sheets...';
-
-                fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        statusDiv.style.color = 'green';
-                        
-                        // สร้างรายการ Test ที่ดึงมาได้เพื่อแสดงผลให้ User ดู
-                        let testsHTML = parsedData.tests.map(t => `• <b>${t.testName}</b> (SDI: ${t.sdi})`).join('<br>');
-                        
-                        statusDiv.innerHTML = `✅ <b>บันทึกสำเร็จทั้งหมด ${parsedData.tests.length} รายการ! ข้อมูลที่ดึงได้:</b><br><br>
-                        • <b>Lab Ref:</b> ${parsedData.labRefNo}<br>
-                        • <b>เครื่อง:</b> ${parsedData.machineName}<br>
-                        • <b>Cycle/Sample:</b> ${parsedData.cycle} / ${parsedData.sample}<br>
-                        • <b>Issue Date:</b> ${parsedData.issueDate}<br><br>
-                        <b>รายการทดสอบที่บันทึก:</b><br>
-                        ${testsHTML}`;
-                        
-                        document.getElementById('eqaForm').reset();
-                        document.getElementById('fileNameDisplay').innerText = 'ยังไม่ได้เลือกไฟล์';
-                    } else {
-                        statusDiv.innerText = '❌ เกิดข้อผิดพลาดฝั่งเซิร์ฟเวอร์: ' + data.message;
-                        statusDiv.style.color = 'red';
-                    }
-                })
-                .catch(err => {
-                    statusDiv.innerText = '❌ เกิดข้อผิดพลาดในการเชื่อมต่อ (CORS หรือ URL ผิด)';
-                    statusDiv.style.color = 'red';
-                })
-                .finally(() => {
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = 'อ่านข้อมูลและบันทึก';
-                });
-            };
-            
-            reader.readAsDataURL(file);
-
-        } catch (error) {
-            console.error(error);
-            statusDiv.style.display = 'block';
-            statusDiv.innerText = '❌ ไม่สามารถอ่านตัวหนังสือจาก PDF นี้ได้ (อาจเป็นไฟล์ภาพที่ถูกสแกน)';
-            statusDiv.style.color = 'red';
-            submitBtn.disabled = false;
-            submitBtn.innerText = 'อ่านข้อมูลและบันทึก';
-        }
-    });
 </script>
 
 </body>
