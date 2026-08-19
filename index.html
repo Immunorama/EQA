@@ -3,593 +3,116 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔬 RIQAS PDF Processor - Enhanced</title>
+    <title>EQA Report Uploader</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            padding: 40px;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 40px;
-        }
-
-        .header h1 {
-            color: #333;
-            margin-bottom: 15px;
-            font-size: 2.5em;
-        }
-
-        .header p {
-            color: #666;
-            font-size: 16px;
-            line-height: 1.6;
-        }
-
-        .upload-area {
-            border: 3px dashed #ddd;
-            border-radius: 15px;
-            padding: 50px;
-            text-align: center;
-            margin-bottom: 30px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            min-height: 200px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .upload-area:hover {
-            border-color: #667eea;
-            background-color: #f8f9ff;
-            transform: translateY(-2px);
-        }
-
-        .upload-area.dragover {
-            border-color: #667eea;
-            background-color: #f0f4ff;
-            transform: scale(1.02);
-        }
-
-        .upload-icon {
-            font-size: 64px;
-            color: #ddd;
-            margin-bottom: 20px;
-            transition: all 0.3s ease;
-        }
-
-        .upload-area:hover .upload-icon {
-            color: #667eea;
-            transform: scale(1.1);
-        }
-
-        .upload-text {
-            color: #666;
-            margin-bottom: 20px;
-            font-size: 18px;
-        }
-
-        .file-input {
-            display: none;
-        }
-
-        .btn {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-            border: none;
-            padding: 15px 40px;
-            border-radius: 30px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            margin: 10px;
-        }
-
-        .btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .btn.secondary {
-            background: linear-gradient(45deg, #95a5a6, #7f8c8d);
-        }
-
-        .progress {
-            width: 100%;
-            height: 8px;
-            background: #f0f0f0;
-            border-radius: 4px;
-            margin: 20px 0;
-            overflow: hidden;
-            display: none;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            width: 0%;
-            transition: width 0.3s ease;
-            border-radius: 4px;
-        }
-
-        .result {
-            margin-top: 30px;
-            padding: 20px;
-            border-radius: 10px;
-            display: none;
-        }
-
-        .result.success {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-        }
-
-        .result.error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            color: #721c24;
-        }
-
-        .file-info {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 20px;
-            display: none;
-            border-left: 5px solid #667eea;
-        }
-
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .url-input {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #ddd;
-            border-radius: 10px;
-            margin-top: 20px;
-            font-size: 16px;
-            transition: border-color 0.3s ease;
-        }
-
-        .url-input:focus {
-            border-color: #667eea;
-            outline: none;
-        }
-
-        .supported-formats {
-            background: #e8f4f8;
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-
-        .supported-formats h3 {
-            color: #2c5282;
-            margin-bottom: 15px;
-        }
-
-        .format-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 10px;
-            font-size: 14px;
-            color: #4a5568;
-        }
-
-        .format-item {
-            padding: 8px 12px;
-            background: white;
-            border-radius: 5px;
-            border-left: 4px solid #667eea;
-        }
-
-        .stats {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 20px;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 10px;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-number {
-            font-size: 2em;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .stat-label {
-            color: #666;
-            font-size: 14px;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f9; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .container { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); text-align: center; max-width: 500px; width: 90%; }
+        h1 { color: #2c3e50; margin-bottom: 20px; }
+        #upload-form { display: flex; flex-direction: column; gap: 20px; }
+        .file-input-wrapper { position: relative; }
+        #file-input { display: none; }
+        .file-label { display: block; padding: 20px; border: 2px dashed #3498db; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; }
+        .file-label:hover { background-color: #ecf0f1; border-color: #2980b9; }
+        #file-name { margin-top: 10px; color: #555; font-style: italic; }
+        #submit-btn { padding: 15px; background-color: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: background-color 0.3s ease; }
+        #submit-btn:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        #status { margin-top: 20px; font-weight: bold; }
+        .status-success { color: #2ecc71; }
+        .status-error { color: #e74c3c; }
+        .spinner { border: 4px solid rgba(0, 0, 0, 0.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: #3498db; animation: spin 1s ease infinite; margin: 20px auto; display: none; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🔬 RIQAS PDF Processor</h1>
-            <p>ระบบสกัดและจัดเก็บข้อมูล External Quality Assessment (EQA) อัตโนมัติ<br>
-               รองรับไฟล์ PDF หลากหลายรูปแบบจาก RIQAS</p>
-        </div>
-
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">📄</div>
-            <div class="upload-text">
-                <strong>คลิกเพื่อเลือกไฟล์ PDF</strong><br>
-                หรือลากและวางไฟล์ที่นี่
+        <h1>ระบบอัปโหลดและบันทึกผล EQA</h1>
+        <form id="upload-form">
+            <div class="file-input-wrapper">
+                <label for="file-input" class="file-label" id="file-label">คลิกเพื่อเลือกไฟล์ PDF</label>
+                <input type="file" id="file-input" name="file" accept="application/pdf" required>
+                <div id="file-name"></div>
             </div>
-            <input type="file" class="file-input" id="fileInput" accept=".pdf" multiple>
-            <button type="button" class="btn" onclick="document.getElementById('fileInput').click()">
-                📁 เลือกไฟล์
-            </button>
-        </div>
-
-        <input type="url" class="url-input" id="pdfUrl" placeholder="🔗 ลิงก์ PDF (ไม่บังคับ)" style="display: none;">
-
-        <div class="file-info" id="fileInfo"></div>
-
-        <div class="progress" id="progress">
-            <div class="progress-bar" id="progressBar"></div>
-        </div>
-
-        <div style="text-align: center;">
-            <button type="button" class="btn" id="uploadBtn" onclick="processFiles()" disabled>
-                <span id="uploadText">🚀 อัปโหลดและประมวลผล</span>
-            </button>
-            <button type="button" class="btn secondary" onclick="resetForm()">
-                🔄 เริ่มใหม่
-            </button>
-        </div>
-
-        <div class="result" id="result"></div>
-
-        <div class="supported-formats">
-            <h3>🎯 รูปแบบ PDF ที่รองรับ</h3>
-            <div class="format-list">
-                <div class="format-item">IMMUNOASSAY (CA 125, CA 15-3, Ferritin)</div>
-                <div class="format-item">IMMUNOSUPPRESSANT (Sirolimus, Tacrolimus)</div>
-                <div class="format-item">SPECIFIC PROTEINS (9 การทดสอบ)</div>
-                <div class="format-item">IMMUNOASSAY SPECIALITY (Anti-TG, Procalcitonin)</div>
-            </div>
-        </div>
+            <button type="submit" id="submit-btn" disabled>อัปโหลดและประมวลผล</button>
+        </form>
+        <div class="spinner" id="spinner"></div>
+        <div id="status"></div>
     </div>
 
     <script>
-        const GAS_URL = 'https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec'; // ใส่ URL ของ GAS Web App
-        
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const progress = document.getElementById('progress');
-        const progressBar = document.getElementById('progressBar');
-        const result = document.getElementById('result');
-        const fileInfo = document.getElementById('fileInfo');
-        const pdfUrl = document.getElementById('pdfUrl');
-        const uploadText = document.getElementById('uploadText');
+        const GAS_WEB_APP_URL = 'https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec'; // <--- วาง Web App URL ที่คัดลอกมา
 
-        let selectedFiles = [];
+        const form = document.getElementById('upload-form');
+        const fileInput = document.getElementById('file-input');
+        const fileNameDisplay = document.getElementById('file-name');
+        const submitBtn = document.getElementById('submit-btn');
+        const statusDiv = document.getElementById('status');
+        const spinner = document.getElementById('spinner');
+        const fileLabel = document.getElementById('file-label');
 
-        // Drag and drop handlers
-        uploadArea.addEventListener('dragover', (e) => {
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                fileNameDisplay.textContent = file.name;
+                fileLabel.textContent = `ไฟล์ที่เลือก: ${file.name}`;
+                submitBtn.disabled = false;
+            } else {
+                fileNameDisplay.textContent = '';
+                fileLabel.textContent = 'คลิกเพื่อเลือกไฟล์ PDF';
+                submitBtn.disabled = true;
+            }
+        });
+
+        form.addEventListener('submit', function(e) {
             e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
-
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
-
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
             
-            const files = Array.from(e.dataTransfer.files);
-            handleFileSelection(files);
-        });
+            const file = fileInput.files[0];
+            if (!file) return;
 
-        fileInput.addEventListener('change', (e) => {
-            const files = Array.from(e.target.files);
-            handleFileSelection(files);
-        });
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'กำลังประมวลผล...';
+            spinner.style.display = 'block';
+            statusDiv.textContent = '';
+            statusDiv.className = '';
 
-        function handleFileSelection(files) {
-            const validFiles = files.filter(file => {
-                if (file.type !== 'application/pdf') {
-                    showResult(`❌ ไฟล์ ${file.name} ไม่ใช่ PDF`, 'error');
-                    return false;
-                }
-                if (file.size > 16 * 1024 * 1024) {
-                    showResult(`❌ ไฟล์ ${file.name} มีขนาดใหญ่เกิน 16MB`, 'error');
-                    return false;
-                }
-                return true;
-            });
-
-            if (validFiles.length === 0) return;
-
-            selectedFiles = validFiles;
-            
-            let fileInfoHtml = `<strong>📁 ไฟล์ที่เลือก (${selectedFiles.length} ไฟล์):</strong><br><br>`;
-            let totalSize = 0;
-            
-            selectedFiles.forEach((file, index) => {
-                const sizeInMB = (file.size / 1024 / 1024).toFixed(2);
-                totalSize += file.size;
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => {
+                const fileData = reader.result.split(',')[1];
                 
-                const pdfType = detectPdfType(file.name);
-                fileInfoHtml += `
-                    <div style="margin-bottom: 10px; padding: 10px; background: white; border-radius: 5px; border-left: 4px solid #667eea;">
-                        <strong>${index + 1}. ${file.name}</strong><br>
-                        📊 ขนาด: ${sizeInMB} MB | 🔬 ประเภท: ${pdfType}<br>
-                        📅 แก้ไขล่าสุด: ${new Date(file.lastModified).toLocaleString('th-TH')}
-                    </div>
-                `;
-            });
-            
-            fileInfoHtml += `<br><strong>📈 สรุป:</strong> ขนาดรวม ${(totalSize / 1024 / 1024).toFixed(2)} MB`;
-            
-            fileInfo.innerHTML = fileInfoHtml;
-            fileInfo.style.display = 'block';
-            pdfUrl.style.display = 'block';
-            uploadBtn.disabled = false;
-            
-            hideResult();
-        }
+                const payload = {
+                    fileName: file.name,
+                    mimeType: file.type,
+                    fileData: fileData
+                };
 
-        function detectPdfType(fileName) {
-            const lowerFileName = fileName.toLowerCase();
-            
-            if (lowerFileName.includes('riqas') && lowerFileName.includes('i-')) {
-                return '🧪IMMUNOASSAY';
-            }
-            if (lowerFileName.includes('riqas') && lowerFileName.includes('tp-')) {
-                return '💊 IMMUNOSUPPRESSANT';
-            }
-            if (lowerFileName.includes('riqas') && lowerFileName.includes('p-')) {
-                return '🔬 SPECIFIC PROTEINS';
-            }
-            if (lowerFileName.includes('riqas') && lowerFileName.includes('ti-')) {
-                return '🧬 IMMUNOASSAY SPECIALITY';
-            }
-            
-            return '❓ Unknown Type';
-        }
-
-        async function processFiles() {
-            if (selectedFiles.length === 0) {
-                showResult('❌ กรุณาเลือกไฟล์ก่อน', 'error');
-                return;
-            }
-
-            uploadBtn.disabled = true;
-            uploadText.innerHTML = '<span class="loading"></span>กำลังประมวลผล...';
-            progress.style.display = 'block';
-            hideResult();
-
-            let totalProcessed = 0;
-            let totalTests = 0;
-            const results = [];
-
-            try {
-                for (let i = 0; i < selectedFiles.length; i++) {
-                    const file = selectedFiles[i];
-                    const progressPercent = ((i / selectedFiles.length) * 90);
-                    updateProgress(progressPercent);
-                    
-                    uploadText.innerHTML = `<span class="loading"></span>กำลังประมวลผล ${file.name}... (${i+1}/${selectedFiles.length})`;
-
-                    // แปลงไฟล์เป็น base64
-                    const base64Data = await fileToBase64(file);
-                    
-                    // เตรียมข้อมูลส่ง
-                    const requestData = {
-                        pdfBase64: base64Data.split(',')[1],
-                        pdfUrl: pdfUrl.value || '',
-                        fileName: file.name
-                    };
-
-                    // ส่งข้อมูลไปยัง GAS
-                    const response = await fetch(GAS_URL, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(requestData)
-                    });
-
-                    const responseData = await response.json();
-                    
-                    if (responseData.success) {
-                        totalProcessed++;
-                        totalTests += responseData.totalTests || 0;
-                        results.push({
-                            fileName: file.name,
-                            tests: responseData.totalTests || 0,
-                            success: true
-                        });
+                fetch(GAS_WEB_APP_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'application/json' }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        statusDiv.textContent = data.message;
+                        statusDiv.className = 'status-success';
+                        form.reset();
+                        fileNameDisplay.textContent = '';
+                        fileLabel.textContent = 'คลิกเพื่อเลือกไฟล์ PDF';
                     } else {
-                        results.push({
-                            fileName: file.name,
-                            success: false,
-                            error: responseData.error || 'Unknown error'
-                        });
+                        throw new Error(data.message);
                     }
-                }
-
-                updateProgress(100);
-                
-                // แสดงผลลัพธ์
-                let resultHtml = `
-                    <div class="stats">
-                        <div class="stat-item">
-                            <div class="stat-number">${totalProcessed}</div>
-                            <div class="stat-label">ไฟล์สำเร็จ</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-number">${selectedFiles.length - totalProcessed}</div>
-                            <div class="stat-label">ไฟล์ล้มเหลว</div>
-                        </div>
-                        <div class="stat-item">
-                            <div class="stat-number">${totalTests}</div>
-                            <div class="stat-label">การทดสอบทั้งหมด</div>
-                        </div>
-                    </div>
-                    <br>
-                `;
-
-                if (totalProcessed > 0) {
-                    resultHtml += `✅ <strong>ประมวลผลสำเร็จ!</strong><br><br>`;
-                    
-                    results.forEach((result, index) => {
-                        if (result.success) {
-                            resultHtml += `📄 ${result.fileName}: ${result.tests} การทดสอบ<br>`;
-                        }
-                    });
-                    
-                    if (selectedFiles.length - totalProcessed > 0) {
-                        resultHtml += `<br>❌ <strong>ไฟล์ที่ล้มเหลว:</strong><br>`;
-                        results.forEach((result, index) => {
-                            if (!result.success) {
-                                resultHtml += `📄 ${result.fileName}: ${result.error}<br>`;
-                            }
-                        });
-                    }
-                    
-                    resultHtml += `<br>📊 ข้อมูลได้ถูกบันทึกลง Google Sheets เรียบร้อยแล้ว`;
-                    showResult(resultHtml, 'success');
-                } else {
-                    showResult(`❌ ไม่สามารถประมวลผลไฟล์ใดๆ ได้<br><br>${results.map(r => `📄 ${r.fileName}: ${r.error}`).join('<br>')}`, 'error');
-                }
-
-            } catch (error) {
-                console.error('Error:', error);
-                showResult(`❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}`, 'error');
-            } finally {
-                uploadBtn.disabled = false;
-                uploadText.innerHTML = '🚀 อัปโหลดและประมวลผล';
-                setTimeout(() => {
-                    progress.style.display = 'none';
-                    updateProgress(0);
-                }, 3000);
-            }
-        }
-
-        function fileToBase64(file) {
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = () => resolve(reader.result);
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
-        }
-
-        function updateProgress(percent) {
-            progressBar.style.width = percent + '%';
-        }
-
-        function showResult(message, type) {
-            result.innerHTML = message;
-            result.className = `result ${type}`;
-            result.style.display = 'block';
-            
-            // Scroll to result
-            result.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-
-        function hideResult() {
-            result.style.display = 'none';
-        }
-
-        function resetForm() {
-            selectedFiles = [];
-            fileInput.value = '';
-            pdfUrl.value = '';
-            fileInfo.style.display = 'none';
-            pdfUrl.style.display = 'none';
-            uploadBtn.disabled = true;
-            hideResult();
-            updateProgress(0);
-            progress.style.display = 'none';
-            uploadText.innerHTML = '🚀 อัปโหลดและประมวลผล';
-        }
-
-        // เพิ่ม keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'o') {
-                e.preventDefault();
-                document.getElementById('fileInput').click();
-            }
-            if (e.ctrlKey && e.key === 'Enter') {
-                e.preventDefault();
-                if (!uploadBtn.disabled) processFiles();
-            }
-            if (e.key === 'Escape') {
-                resetForm();
-            }
+                })
+                .catch(error => {
+                    statusDiv.textContent = 'เกิดข้อผิดพลาด: ' + error.message;
+                    statusDiv.className = 'status-error';
+                })
+                .finally(() => {
+                    spinner.style.display = 'none';
+                    submitBtn.disabled = false; // or true if you want them to refresh
+                    submitBtn.textContent = 'อัปโหลดและประมวลผล';
+                });
+            };
         });
-
-        // แสดง keyboard shortcuts
-        const shortcuts = document.createElement('div');
-        shortcuts.innerHTML = `
-            <div style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 5px; font-size: 12px; z-index: 1000;">
-                <strong>⌨️ Shortcuts:</strong><br>
-                Ctrl+O: เลือกไฟล์<br>
-                Ctrl+Enter: ประมวลผล<br>
-                Esc: เริ่มใหม่
-            </div>
-        `;
-        document.body.appendChild(shortcuts);
-
-        // Auto-hide shortcuts after 5 seconds
-        setTimeout(() => {
-            shortcuts.style.opacity = '0.3';
-        }, 5000);
     </script>
 </body>
 </html>
