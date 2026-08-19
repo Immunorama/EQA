@@ -78,22 +78,28 @@
                 if(textBetween.trim().length > 5) department = textBetween.trim();
             }
 
-            // 6. ดึงชื่อการทดสอบ และค่า SDI (อัปเดต Regex ใหม่: หาหลังคำว่า Deviation)
+           // 6. ดึงชื่อการทดสอบ และค่า SDI
             const testsData = [];
-            // Regex หาคำว่า Deviation นำหน้า -> ตามด้วยชื่อการทดสอบ -> คอมม่า -> Your Result -> SDI
-            const testRegex = /Deviation[\s\S]*?([A-Za-z0-9\-\s]+?)\s*,\s*[a-zA-Z0-9]+\/[a-zA-Z0-9]+[\s\S]*?Your Result\s+[\d\.]+\s+SDI\s*(-?[\d\.]+)/gi;
+            // Regex หาข้อความหน้าเครื่องหมายคอมม่า (,) ซึ่งมักจะเป็นชื่อการทดสอบ
+            const testRegex = /([A-Za-z0-9\-\s]+?)\s*,\s*[a-zA-Z0-9]+\/[a-zA-Z0-9]+[\s\S]*?Your Result\s+[\d\.]+\s+SDI\s*(-?[\d\.]+)/gi;
             let match;
             
             while ((match = testRegex.exec(fullText)) !== null) {
                 let tName = match[1].trim();
-                // สกัดเอาเฉพาะชื่อเทสต์ที่อยู่ติดกับคอมม่า (กรองข้อความขยะที่อาจติดมาจาก pdf.js)
-                let nameParts = tName.split(/\s+/);
-                if(nameParts.length > 3) {
-                    // เลือกมาเฉพาะ 2-3 คำสุดท้ายที่เป็นชื่อจริงๆ เช่น CA 125 หรือ CA 15-3
-                    tName = nameParts.slice(-3).join(" "); 
-                }
+                
+                // 1. ลบคำว่า Standard และ Deviation ที่มักจะติดมาด้วยจากหัวกราฟ
+                tName = tName.replace(/Standard/ig, '').replace(/Deviation/ig, '').trim();
+                
+                // 2. แก้ไขปัญหา pdf.js เว้นวรรคตัวอักษรผิดปกติ (ตัวอย่างเช่น Ferriti n)
+                tName = tName.replace(/Ferriti\s+n/ig, 'Ferritin');
+                
+                // 3. เคลียร์ช่องว่างที่เกิดจากการลบคำซ้ำซ้อนให้เหลือแค่สเปซเดียว
+                tName = tName.replace(/\s{2,}/g, ' ');
 
-                testsData.push({ testName: tName, sdi: match[2].trim() });
+                // กรองเฉพาะค่าที่มีความยาวตัวอักษรสมเหตุสมผลเพื่อป้องกันขยะ
+                if(tName.length > 1) {
+                    testsData.push({ testName: tName, sdi: match[2].trim() });
+                }
             }
 
             // นำข้อมูลเข้าสู่ Object เตรียมส่งให้ GAS
