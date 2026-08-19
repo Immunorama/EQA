@@ -1,29 +1,170 @@
-<form id="uploadForm">
-  <input type="file" id="pdfFile" accept="application/pdf">
-  <input type="text" id="department" placeholder="ชื่อหน่วยงาน">
-  <!-- ใส่ฟิลด์อื่นๆ ตามต้องการ -->
-  <button type="button" onclick="uploadData()">Submit</button>
-</form>
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>EQA PDF Uploader & Extractor</title>
+    <!-- นำเข้าไลบรารี pdf.js สำหรับอ่าน PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .preview-box { border: 1px solid #ccc; padding: 15px; margin-top: 20px; border-radius: 5px; background: #f9f9f9; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #eee; }
+        button { padding: 10px 15px; background: #4CAF50; color: white; border: none; cursor: pointer; margin-top: 10px;}
+        button:hover { background: #45a049; }
+    </style>
+</head>
+<body>
 
-<script>
-  function uploadData() {
-    const file = document.getElementById('pdfFile').files[0];
-    const reader = new FileReader();
+    <h2>ระบบอัปโหลดและดึงข้อมูลผล EQA</h2>
+    <input type="file" id="pdfFile" accept="application/pdf" onchange="processPDF()">
     
-    reader.onload = function(e) {
-      const data = {
-        fileName: file.name,
-        fileType: file.type,
-        fileData: e.target.result.split(',')[1],
-        department: document.getElementById('department').value,
-        // เพิ่มข้อมูลอื่นๆ ที่ดึงมาได้จากหน้าเว็บ
-      };
-      
-      fetch('https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec', {
-        method: 'POST',
-        body: JSON.stringify(data)
-      }).then(res => alert('บันทึกสำเร็จ'));
-    };
-    reader.readAsDataURL(file);
-  }
-</script>
+    <div id="previewArea" class="preview-box" style="display:none;">
+        <h3>ตรวจสอบข้อมูลก่อนบันทึก</h3>
+        <p><strong>LAB REF. NO.:</strong> <span id="p-ref"></span></p>
+        <p><strong>ชื่อเครื่อง:</strong> <span id="p-machine"></span></p>
+        <p><strong>หน่วยงาน:</strong> <span id="p-dept"></span></p>
+        <p><strong>โปรแกรม:</strong> <span id="p-program"></span></p>
+        <p><strong>Cycle:</strong> <span id="p-cycle"></span> | <strong>Sample:</strong> <span id="p-sample"></span></p>
+        <p><strong>Issue Date:</strong> <span id="p-date"></span></p>
+        
+        <h4>รายการผลการทดสอบที่พบ</h4>
+        <table id="testsTable">
+            <tr><th>ชื่อการทดสอบ</th><th>SDI</th></tr>
+        </table>
+
+        <button onclick="uploadToGAS()" id="uploadBtn">ยืนยันและบันทึกลง Google Sheet</button>
+    </div>
+
+    <script>
+        // ตั้งค่า Worker ของ pdf.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        let extractedPayload = {}; // เก็บข้อมูลเตรียมส่งให้ GAS
+
+        async function processPDF() {
+            const file = document.getElementById('pdfFile').files[0];
+            if (!file) return;
+
+            // อ่านไฟล์ PDF
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+            
+            let fullText = "";
+            
+            // วนลูปอ่านข้อความจากทุกหน้า
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                // นำคำมาต่อกันโดยใช้การขึ้นบรรทัดใหม่และช่องว่าง เพื่อรักษาโครงสร้างของเอกสาร
+                const pageText = textContent.items.map(item => item.str).join(" ");
+                fullText += pageText + "\n";
+            }
+
+            // === ส่วนการใช้ REGEX ดึงข้อมูลตามเงื่อนไข ===
+            
+            // 1. LAB REF. NO. เช่น 222557.5
+            const refMatch = fullText.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
+            const labRef = refMatch ? refMatch[1] : '';
+
+            // 2. ชื่อเครื่อง (ตามหลัง Reg (B) -)
+            const machineMatch = fullText.match(/Reg\s*\([A-Z]\)\s*-\s*([^R]+?)\s+(?:Ramathibodi|IMMUNOASSAY)/i); 
+            // หากหาจากเครื่องอื่นที่ไม่ได้ชื่อ Ramathibodi ให้ใช้: /Reg \([A-Z]\)\s*-\s*(.+?)\s+(?=[A-Z][a-z]+)/
+            const machine = machineMatch ? machineMatch[1].trim() : (fullText.match(/Reg \([A-Z]\)\s*-\s*(.+)/) || [])[1];
+
+            // 3. Cycle & Sample[cite: 3]
+            const cycleMatch = fullText.match(/CYCLE\s+(\d+)\s+SAMPLE\s+(\d+)/);
+            const cycle = cycleMatch ? cycleMatch[1] : '';
+            const sample = cycleMatch ? cycleMatch[2] : '';
+
+            // 4. Issue Date[cite: 3]
+            const dateMatch = fullText.match(/Issue Date:\s*([\d\/]+)/);
+            const issueDate = dateMatch ? dateMatch[1] : '';
+
+            // 5. ดึงชื่อหน่วยงานและโปรแกรม (ส่วนใหญ่อยู่บรรทัดถัดจากเครื่อง)[cite: 3]
+            // เนื่องจาก pdf.js อาจทำให้บรรทัดปนกัน จึงใช้การอนุมานคำว่า IMMUNOASSAY
+            const programMatch = fullText.match(/(IMMUNOASSAY)/);
+            const program = programMatch ? programMatch[1] : 'IMMUNOASSAY';
+            
+            // ดึงหน่วยงานโดยหาข้อความระหว่างชื่อเครื่องกับคำว่า IMMUNOASSAY[cite: 3]
+            let department = "Ramathibodi Hospital (Immunology)"; // สามารถปรับเป็น input กรอกมือได้ถ้าหาอัตโนมัติไม่เจอ
+            if(machine && fullText.includes(machine) && fullText.includes("IMMUNOASSAY")) {
+                const textBetween = fullText.split(machine)[1].split("IMMUNOASSAY")[0];
+                if(textBetween.trim().length > 5) department = textBetween.trim();
+            }
+
+            // 6. ดึงชื่อการทดสอบ (หน้าเครื่องหมาย ,) และค่า SDI (หลัง SDI) 
+            // Regex นี้ค้นหารูปแบบ "ชื่อ, หน่วย ... จนถึง Your Result [ค่า] SDI [ค่า]"
+            const testsData = [];
+            const testRegex = /([A-Za-z0-9\-\s]+?)\s*,\s*[a-zA-Z]+\/[a-zA-Z]+[\s\S]*?Your Result\s+[\d\.]+\s+SDI\s*(-?[\d\.]+)/g;
+            let match;
+            
+            while ((match = testRegex.exec(fullText)) !== null) {
+                let tName = match[1].trim();
+                // กรองเอาเฉพาะคำลงท้ายที่น่าจะเป็นชื่อเทสต์ (เผื่อ pdf.js ดึงข้อความอื่นติดมา)
+                let nameParts = tName.split(/\s+/);
+                if(nameParts.length > 3) tName = nameParts.slice(-3).join(" "); 
+
+                testsData.push({ testName: tName, sdi: match[2].trim() });
+            }
+
+            // === เตรียมข้อมูลและแสดงผล Preview ===
+            extractedPayload.commonData = { labRef, machine, department, program, cycle, sample, issueDate };
+            extractedPayload.testsData = testsData;
+            
+            // อ่านไฟล์เป็น Base64 เพื่อเตรียมส่งให้ GAS
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                extractedPayload.fileName = file.name;
+                extractedPayload.fileType = file.type;
+                extractedPayload.fileData = e.target.result.split(',')[1];
+            };
+            reader.readAsDataURL(file);
+
+            // แสดงในหน้าเว็บ
+            document.getElementById('p-ref').innerText = labRef;
+            document.getElementById('p-machine').innerText = machine;
+            document.getElementById('p-dept').innerText = department;
+            document.getElementById('p-program').innerText = program;
+            document.getElementById('p-cycle').innerText = cycle;
+            document.getElementById('p-sample').innerText = sample;
+            document.getElementById('p-date').innerText = issueDate;
+
+            const table = document.getElementById('testsTable');
+            table.innerHTML = '<tr><th>ชื่อการทดสอบ</th><th>SDI</th></tr>'; // ล้างข้อมูลเก่า
+            testsData.forEach(t => {
+                table.innerHTML += `<tr><td>${t.testName}</td><td>${t.sdi}</td></tr>`;
+            });
+
+            document.getElementById('previewArea').style.display = 'block';
+        }
+
+        function uploadToGAS() {
+            const btn = document.getElementById('uploadBtn');
+            btn.innerText = "กำลังอัปโหลด...";
+            btn.disabled = true;
+
+            // เอา URL ของ Web App GAS ของคุณมาใส่ที่นี่
+            const gasUrl = "https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec"; 
+
+            fetch(gasUrl, {
+                method: 'POST',
+                body: JSON.stringify(extractedPayload)
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert("บันทึกข้อมูลเรียบร้อยแล้ว! ดูไฟล์ได้ที่: " + data.url);
+                btn.innerText = "ยืนยันและบันทึกลง Google Sheet";
+                btn.disabled = false;
+            })
+            .catch(error => {
+                console.error("Error:", error);
+                alert("เกิดข้อผิดพลาดในการอัปโหลด");
+                btn.innerText = "ยืนยันและบันทึกลง Google Sheet";
+                btn.disabled = false;
+            });
+        }
+    </script>
+</body>
+</html>
