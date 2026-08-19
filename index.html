@@ -139,36 +139,41 @@
                 sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
             };
 
-            // --- หน้า 2 เป็นต้นไป ---
-            const rows = [];
-            for (let i = 2; i <= pdf.numPages; i++) {
-                await yieldToUI(); // ป้องกัน Browser Freeze
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
+         // --- หน้า 2 เป็นต้นไป ---
+const rows = [];
+for (let i = 2; i <= pdf.numPages; i++) {
+    await yieldToUI();
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map(item => item.str).join(' ');
 
-                if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-                    let testName = "";
-                    const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
-                    if (testMatch) {
-                        testName = testMatch[1].trim();
-                    }
+    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
+        let testName = "";
+        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+        
+        if (testMatch) {
+            testName = testMatch[1]
+                .replace(/.*?Standard Deviation\s*/i, '') // ตัดข้อความ Standard Deviation และส่วนก่อนหน้าออก
+                .replace(/.*?IMMUNOASSAY\s*/i, '')         // ตัดชื่อโปรแกรมที่อาจติดมาออก
+                .replace(/^[\d\s\+\-\.]+/g, '')            // ตัดตัวเลข สัญลักษณ์ + - ด้านหน้าออก
+                .trim();
+        }
 
-                    let sdi = "";
-                    const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
-                    if (sdiMatch) {
-                        sdi = sdiMatch[1];
-                    }
+        let sdi = "";
+        const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
+        if (sdiMatch) {
+            sdi = sdiMatch[1];
+        }
 
-                    if (testName && sdi) {
-                        rows.push({
-                            ...metadata,
-                            testName: testName,
-                            sdi: sdi
-                        });
-                    }
-                }
-            }
+        if (testName && sdi) {
+            rows.push({
+                ...metadata,
+                testName: testName,
+                sdi: sdi
+            });
+        }
+    }
+}
 
             extractedData = { metadata, rows };
             displayPreview(extractedData);
