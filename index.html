@@ -2,172 +2,138 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>EQA PDF Uploader & Extractor</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบดึงข้อมูลจาก PDF | PDF Extractor</title>
+    
+    <!-- ส่วนของการตกแต่ง (CSS) -->
     <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        .preview-box { border: 1px solid #ccc; padding: 15px; margin-top: 20px; border-radius: 5px; background: #f9f9f9; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #eee; }
-        button { padding: 10px 15px; background: #4CAF50; color: white; border: none; cursor: pointer; margin-top: 10px;}
-        button:hover { background: #45a049; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        header {
+            background-color: #007bff;
+            color: white;
+            text-align: center;
+            padding: 2rem 0;
+        }
+        main {
+            padding: 20px;
+            max-width: 800px;
+            margin: 30px auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            margin-top: 0;
+        }
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-bottom: 15px;
+        }
+        .btn:hover {
+            background-color: #218838;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        .result-box {
+            padding: 15px;
+            background-color: #e9ecef;
+            border-left: 5px solid #007bff;
+            border-radius: 4px;
+            font-size: 18px;
+        }
+        footer {
+            text-align: center;
+            padding: 15px 0;
+            margin-top: 40px;
+            background-color: #343a40;
+            color: white;
+        }
     </style>
 </head>
 <body>
 
-    <h2>ระบบอัปโหลดและดึงข้อมูลผล EQA</h2>
-    <input type="file" id="pdfFile" accept="application/pdf" onchange="processPDF()">
-    
-    <div id="previewArea" class="preview-box" style="display:none;">
-        <h3>ตรวจสอบข้อมูลก่อนบันทึก</h3>
-        <p><strong>LAB REF. NO.:</strong> <span id="p-ref"></span></p>
-        <p><strong>ชื่อเครื่อง:</strong> <span id="p-machine"></span></p>
-        <p><strong>หน่วยงาน:</strong> <span id="p-dept"></span></p>
-        <p><strong>โปรแกรม:</strong> <span id="p-program"></span></p>
-        <p><strong>Cycle:</strong> <span id="p-cycle"></span> | <strong>Sample:</strong> <span id="p-sample"></span></p>
-        <p><strong>Issue Date:</strong> <span id="p-date"></span></p>
+    <!-- ส่วนหัวของเว็บไซต์ -->
+    <header>
+        <h1>ระบบดึงชื่อเครื่องจากไฟล์ RIQAS</h1>
+        <p>วางข้อความดิบที่ได้จากไฟล์ PDF เพื่อทดสอบการทำงาน</p>
+    </header>
+
+    <!-- ส่วนเนื้อหาหลัก -->
+    <main>
+        <h2>ทดสอบ Regex</h2>
+        <p>กรุณาวางข้อความที่อ่านได้จากไฟล์ PDF ลงในกล่องด้านล่าง (ตัวอย่างเช่น: <code>LABORATORY REF. NO. 222557.5 Dade Behring Ramathibodi Hospital...</code>)</p>
         
-        <h4>รายการผลการทดสอบที่พบ</h4>
-        <table id="testsTable">
-            <tr><th>ชื่อการทดสอบ</th><th>SDI</th></tr>
-        </table>
+        <!-- กล่องสำหรับใส่ข้อความ -->
+        <textarea id="pdfTextInput" rows="8" placeholder="วางข้อความจาก PDF ที่นี่..."></textarea>
 
-        <button onclick="uploadToGAS()" id="uploadBtn">ยืนยันและบันทึกลง Google Sheet</button>
-    </div>
+        <!-- ปุ่มกดเพื่อทำงาน -->
+        <button id="extractBtn" class="btn">ดึงชื่อเครื่อง</button>
+        
+        <!-- ส่วนแสดงผลลัพธ์ -->
+        <div class="result-box">
+            <strong>ชื่อเครื่องที่ดึงได้: </strong> 
+            <span id="resultText" style="color: #d9534f;">-</span>
+        </div>
+    </main>
 
+    <!-- ส่วนท้ายของเว็บไซต์ -->
+    <footer>
+        <p>&copy; 2026 My Website. All rights reserved.</p>
+    </footer>
+
+    <!-- ส่วนของการทำงาน (JavaScript) -->
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-        let extractedPayload = {}; 
-
-        async function processPDF() {
-            const file = document.getElementById('pdfFile').files[0];
-            if (!file) return;
-
-            const arrayBuffer = await file.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+        // เมื่อกดปุ่ม "ดึงชื่อเครื่อง" ให้รันฟังก์ชันนี้
+        document.getElementById('extractBtn').addEventListener('click', function() {
+            // 1. อ่านข้อความที่ผู้ใช้พิมพ์หรือวางลงใน textarea
+            const fullText = document.getElementById('pdfTextInput').value;
             
-            let fullText = "";
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(" ");
-                fullText += pageText + "\n";
-            }
-
-            // 1-5. ดึงข้อมูลพื้นฐานหน่วยงาน
-            const refMatch = fullText.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/);
-            const labRef = refMatch ? refMatch[1] : '';
-            // ดึงชื่อเครื่อง (Registration Name / Instrument)
-            // ค้นหาข้อความที่อยู่ระหว่างเลข REF. NO. และคำว่า Ramathibodi
+            // 2. กำหนด Regex สำหรับค้นหาชื่อเครื่อง
+            // ค้นหาข้อความที่อยู่ระหว่าง LABORATORY REF. NO. [ตัวเลข] และ Ramathibodi Hospital
             const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s+(.*?)\s+Ramathibodi Hospital/i;
             const machineMatch = fullText.match(machineRegex);
 
-            let machineName = "Unknown";
+            // 3. ตรวจสอบว่าเจอคำที่ตรงเงื่อนไขหรือไม่
+            let machineName = "ไม่พบข้อมูล (ตรวจสอบรูปแบบข้อความอีกครั้ง)";
             if (machineMatch && machineMatch[1]) {
-            // ลบช่องว่างส่วนเกินออก
-            machineName = machineMatch[1].trim();
+                machineName = machineMatch[1].trim(); // ลบช่องว่างส่วนเกินหน้า-หลัง
             }
 
-            console.log("ชื่อเครื่องที่ดึงได้:", machineName);
-
-            const machineMatch = fullText.match(/Reg\s*\([A-Z]\)\s*-\s*([^R]+?)\s+(?:Ramathibodi|IMMUNOASSAY)/i); 
-            const machine = machineMatch ? machineMatch[1].trim() : (fullText.match(/Reg \([A-Z]\)\s*-\s*(.+)/) || [])[1];
-
-            const cycleMatch = fullText.match(/CYCLE\s+(\d+)\s+SAMPLE\s+(\d+)/);
-            const cycle = cycleMatch ? cycleMatch[1] : '';
-            const sample = cycleMatch ? cycleMatch[2] : '';
-
-            const dateMatch = fullText.match(/Issue Date:\s*([\d\/]+)/);
-            const issueDate = dateMatch ? dateMatch[1] : '';
-
-            const programMatch = fullText.match(/(IMMUNOASSAY)/);
-            const program = programMatch ? programMatch[1] : 'IMMUNOASSAY';
+            // 4. นำผลลัพธ์ไปแสดงบนหน้าจอ
+            const resultSpan = document.getElementById('resultText');
+            resultSpan.innerText = machineName;
             
-            let department = "Ramathibodi Hospital (Immunology)"; 
-            if(machine && fullText.includes(machine) && fullText.includes("IMMUNOASSAY")) {
-                const textBetween = fullText.split(machine)[1].split("IMMUNOASSAY")[0];
-                if(textBetween.trim().length > 5) department = textBetween.trim();
+            // เปลี่ยนสีข้อความเมื่อค้นหาเจอ
+            if (machineName !== "ไม่พบข้อมูล (ตรวจสอบรูปแบบข้อความอีกครั้ง)") {
+                resultSpan.style.color = "#28a745"; // สีเขียวถ้าเจอข้อมูล
+            } else {
+                resultSpan.style.color = "#d9534f"; // สีแดงถ้าไม่เจอ
             }
-
-           // 6. ดึงชื่อการทดสอบ และค่า SDI
-            const testsData = [];
-            // Regex หาข้อความหน้าเครื่องหมายคอมม่า (,) ซึ่งมักจะเป็นชื่อการทดสอบ
-            const testRegex = /([A-Za-z0-9\-\s]+?)\s*,\s*[a-zA-Z0-9]+\/[a-zA-Z0-9]+[\s\S]*?Your Result\s+[\d\.]+\s+SDI\s*(-?[\d\.]+)/gi;
-            let match;
-            
-            while ((match = testRegex.exec(fullText)) !== null) {
-                let tName = match[1].trim();
-                
-                // 1. ลบคำว่า Standard และ Deviation ที่มักจะติดมาด้วยจากหัวกราฟ
-                tName = tName.replace(/Standard/ig, '').replace(/Deviation/ig, '').trim();
-                
-                // 2. แก้ไขปัญหา pdf.js เว้นวรรคตัวอักษรผิดปกติ (ตัวอย่างเช่น Ferriti n)
-                tName = tName.replace(/Ferriti\s+n/ig, 'Ferritin');
-                
-                // 3. เคลียร์ช่องว่างที่เกิดจากการลบคำซ้ำซ้อนให้เหลือแค่สเปซเดียว
-                tName = tName.replace(/\s{2,}/g, ' ');
-
-                // กรองเฉพาะค่าที่มีความยาวตัวอักษรสมเหตุสมผลเพื่อป้องกันขยะ
-                if(tName.length > 1) {
-                    testsData.push({ testName: tName, sdi: match[2].trim() });
-                }
-            }
-
-            // นำข้อมูลเข้าสู่ Object เตรียมส่งให้ GAS
-            extractedPayload.commonData = { labRef, machine, department, program, cycle, sample, issueDate };
-            extractedPayload.testsData = testsData;
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                extractedPayload.fileName = file.name;
-                extractedPayload.fileType = file.type;
-                extractedPayload.fileData = e.target.result.split(',')[1];
-            };
-            reader.readAsDataURL(file);
-
-            // แสดง Preview บนหน้าเว็บ
-            document.getElementById('p-ref').innerText = labRef;
-            document.getElementById('p-machine').innerText = machine;
-            document.getElementById('p-dept').innerText = department;
-            document.getElementById('p-program').innerText = program;
-            document.getElementById('p-cycle').innerText = cycle;
-            document.getElementById('p-sample').innerText = sample;
-            document.getElementById('p-date').innerText = issueDate;
-
-            const table = document.getElementById('testsTable');
-            table.innerHTML = '<tr><th>ชื่อการทดสอบ</th><th>SDI</th></tr>';
-            testsData.forEach(t => {
-                table.innerHTML += `<tr><td>${t.testName}</td><td>${t.sdi}</td></tr>`;
-            });
-
-            document.getElementById('previewArea').style.display = 'block';
-        }
-
-        function uploadToGAS() {
-            const btn = document.getElementById('uploadBtn');
-            btn.innerText = "กำลังอัปโหลด...";
-            btn.disabled = true;
-
-            const gasUrl = "https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec"; // <--- อย่าลืมนำ URL ใหม่ของคุณมาวางตรงนี้
-
-            fetch(gasUrl, {
-                method: 'POST',
-                body: JSON.stringify(extractedPayload)
-            })
-            .then(response => response.json())
-            .then(data => {
-                alert("บันทึกข้อมูลเรียบร้อยแล้ว!");
-                btn.innerText = "ยืนยันและบันทึกลง Google Sheet";
-                btn.disabled = false;
-            })
-            .catch(error => {
-                console.error("Error:", error);
-                alert("เกิดข้อผิดพลาดในการอัปโหลด");
-                btn.innerText = "ยืนยันและบันทึกลง Google Sheet";
-                btn.disabled = false;
-            });
-        }
+        });
     </script>
+
 </body>
 </html>
