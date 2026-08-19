@@ -1,118 +1,29 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EQA Report Uploader</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: #f4f7f9; color: #333; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .container { background: #fff; padding: 40px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.1); text-align: center; max-width: 500px; width: 90%; }
-        h1 { color: #2c3e50; margin-bottom: 20px; }
-        #upload-form { display: flex; flex-direction: column; gap: 20px; }
-        .file-input-wrapper { position: relative; }
-        #file-input { display: none; }
-        .file-label { display: block; padding: 20px; border: 2px dashed #3498db; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; }
-        .file-label:hover { background-color: #ecf0f1; border-color: #2980b9; }
-        #file-name { margin-top: 10px; color: #555; font-style: italic; }
-        #submit-btn { padding: 15px; background-color: #3498db; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; transition: background-color 0.3s ease; }
-        #submit-btn:disabled { background-color: #bdc3c7; cursor: not-allowed; }
-        #status { margin-top: 20px; font-weight: bold; }
-        .status-success { color: #2ecc71; }
-        .status-error { color: #e74c3c; }
-        .spinner { border: 4px solid rgba(0, 0, 0, 0.1); width: 36px; height: 36px; border-radius: 50%; border-left-color: #3498db; animation: spin 1s ease infinite; margin: 20px auto; display: none; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>ระบบอัปโหลดและบันทึกผล EQA</h1>
-        <form id="upload-form">
-            <div class="file-input-wrapper">
-                <label for="file-input" class="file-label" id="file-label">คลิกเพื่อเลือกไฟล์ PDF</label>
-                <input type="file" id="file-input" name="file" accept="application/pdf" required>
-                <div id="file-name"></div>
-            </div>
-            <button type="submit" id="submit-btn" disabled>อัปโหลดและประมวลผล</button>
-        </form>
-        <div class="spinner" id="spinner"></div>
-        <div id="status"></div>
-    </div>
+<form id="uploadForm">
+  <input type="file" id="pdfFile" accept="application/pdf">
+  <input type="text" id="department" placeholder="ชื่อหน่วยงาน">
+  <!-- ใส่ฟิลด์อื่นๆ ตามต้องการ -->
+  <button type="button" onclick="uploadData()">Submit</button>
+</form>
 
-    <script>
-        const GAS_WEB_APP_URL = 'https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec'; // <--- วาง Web App URL ที่คัดลอกมา
-
-        const form = document.getElementById('upload-form');
-        const fileInput = document.getElementById('file-input');
-        const fileNameDisplay = document.getElementById('file-name');
-        const submitBtn = document.getElementById('submit-btn');
-        const statusDiv = document.getElementById('status');
-        const spinner = document.getElementById('spinner');
-        const fileLabel = document.getElementById('file-label');
-
-        fileInput.addEventListener('change', () => {
-            if (fileInput.files.length > 0) {
-                const file = fileInput.files[0];
-                fileNameDisplay.textContent = file.name;
-                fileLabel.textContent = `ไฟล์ที่เลือก: ${file.name}`;
-                submitBtn.disabled = false;
-            } else {
-                fileNameDisplay.textContent = '';
-                fileLabel.textContent = 'คลิกเพื่อเลือกไฟล์ PDF';
-                submitBtn.disabled = true;
-            }
-        });
-
-        form.addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const file = fileInput.files[0];
-            if (!file) return;
-
-            submitBtn.disabled = true;
-            submitBtn.textContent = 'กำลังประมวลผล...';
-            spinner.style.display = 'block';
-            statusDiv.textContent = '';
-            statusDiv.className = '';
-
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => {
-                const fileData = reader.result.split(',')[1];
-                
-                const payload = {
-                    fileName: file.name,
-                    mimeType: file.type,
-                    fileData: fileData
-                };
-
-                fetch(GAS_WEB_APP_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(payload),
-                    headers: { 'Content-Type': 'application/json' }
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        statusDiv.textContent = data.message;
-                        statusDiv.className = 'status-success';
-                        form.reset();
-                        fileNameDisplay.textContent = '';
-                        fileLabel.textContent = 'คลิกเพื่อเลือกไฟล์ PDF';
-                    } else {
-                        throw new Error(data.message);
-                    }
-                })
-                .catch(error => {
-                    statusDiv.textContent = 'เกิดข้อผิดพลาด: ' + error.message;
-                    statusDiv.className = 'status-error';
-                })
-                .finally(() => {
-                    spinner.style.display = 'none';
-                    submitBtn.disabled = false; // or true if you want them to refresh
-                    submitBtn.textContent = 'อัปโหลดและประมวลผล';
-                });
-            };
-        });
-    </script>
-</body>
-</html>
+<script>
+  function uploadData() {
+    const file = document.getElementById('pdfFile').files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+      const data = {
+        fileName: file.name,
+        fileType: file.type,
+        fileData: e.target.result.split(',')[1],
+        department: document.getElementById('department').value,
+        // เพิ่มข้อมูลอื่นๆ ที่ดึงมาได้จากหน้าเว็บ
+      };
+      
+      fetch('https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      }).then(res => alert('บันทึกสำเร็จ'));
+    };
+    reader.readAsDataURL(file);
+  }
+</script>
