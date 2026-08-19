@@ -219,45 +219,52 @@
     });
 
     // 2. ส่งข้อมูลลง Google Apps Script
-    uploadBtn.addEventListener('click', async () => {
-        if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
-            alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
-            return;
+uploadBtn.addEventListener('click', async () => {
+    if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
+        alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
+        return;
+    }
+
+    uploadBtn.disabled = true;
+    uploadBtn.innerText = "กำลังอัปโหลดและบันทึกข้อมูล...";
+
+    try {
+        const base64File = await fileToBase64(selectedFile);
+
+        const payload = {
+            fileName: selectedFile.name,
+            fileData: base64File,
+            rows: extractedData.rows
+        };
+
+        // ใช้ Content-Type: text/plain เพื่อเลี่ยงการส่ง CORS Preflight (OPTIONS request)
+        const response = await fetch(GAS_URL, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'text/plain;charset=utf-8' 
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        uploadBtn.disabled = true;
-        uploadBtn.innerText = "กำลังอัปโหลดและบันทึกข้อมูล...";
+        const result = await response.json();
 
-        try {
-            const base64File = await fileToBase64(selectedFile);
-
-            const payload = {
-                fileName: selectedFile.name,
-                fileData: base64File,
-                rows: extractedData.rows
-            };
-
-            const response = await fetch(GAS_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify(payload)
-            });
-
-            const result = await response.json();
-
-            if (result.status === "success") {
-                showAlert("alert-success", `🎉 ${result.message} <br> <a href="${result.fileUrl}" target="_blank" class="fw-bold">ดูไฟล์ PDF ใน Google Drive</a>`);
-            } else {
-                showAlert("alert-danger", "เกิดข้อผิดพลาดจาก Backend: " + result.message);
-            }
-        } catch (error) {
-            console.error(error);
-            showAlert("alert-danger", "ไม่สามารถส่งข้อมูลได้: " + error.message);
-        } finally {
-            uploadBtn.disabled = false;
-            uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
+        if (result.status === "success") {
+            showAlert("alert-success", `🎉 ${result.message} <br> <a href="${result.fileUrl}" target="_blank" class="fw-bold">ดูไฟล์ PDF ใน Google Drive</a>`);
+        } else {
+            showAlert("alert-danger", "เกิดข้อผิดพลาดจาก Backend: " + result.message);
         }
-    });
+    } catch (error) {
+        console.error(error);
+        showAlert("alert-danger", "ไม่สามารถส่งข้อมูลได้: " + error.message + " (ตรวจสอบสิทธิ์การเข้าถึง Web App ใน GAS)");
+    } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
+    }
+});
 
     function showLoading(isLoading, text) {
         if (isLoading) {
