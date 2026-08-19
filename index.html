@@ -12,7 +12,6 @@
         body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         .table-preview { font-size: 0.9rem; }
-        .loading-spinner { display: none; }
     </style>
 </head>
 <body>
@@ -23,29 +22,25 @@
             <div class="card p-4 mb-4">
                 <h3 class="card-title text-primary fw-bold mb-3">📁 ระบบอัปโหลดและสกัดข้อมูล EQA (RIQAS)</h3>
                 
-                <!-- URL Apps Script -->
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Google Apps Script Web App URL:</label>
                     <input type="text" id="gasUrl" class="form-control" placeholder="https://script.google.com/macros/s/.../exec">
                 </div>
 
-                <!-- Input เลือกไฟล์ PDF -->
                 <div class="mb-3">
                     <label class="form-label fw-semibold">เลือกไฟล์ PDF รายงาน EQA:</label>
                     <input type="file" id="pdfFileInput" class="form-control" accept="application/pdf">
                 </div>
 
                 <button id="processBtn" class="btn btn-primary w-100 fw-bold py-2" disabled>
-                    <span class="spinner-border spinner-border-sm loading-spinner me-2" id="spinner"></span>
+                    <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner"></span>
                     <span id="btnText">1. อ่านและวิเคราะห์ไฟล์ PDF</span>
                 </button>
             </div>
 
-            <!-- กล่องแสดงผลลัพธ์พรีวิว -->
             <div id="previewCard" class="card p-4 d-none">
                 <h4 class="fw-bold mb-3">📊 สรุปข้อมูลที่สกัดได้จาก PDF</h4>
                 
-                <!-- สรุป Metadata จากหน้า 1 -->
                 <div class="bg-light p-3 rounded mb-4 border">
                     <div class="row g-2">
                         <div class="col-md-6"><strong>ชื่อหน่วยงาน:</strong> <span id="metaOrg" class="text-primary">-</span></div>
@@ -58,8 +53,7 @@
                     </div>
                 </div>
 
-                <!-- ตารางแสดงรายการการทดสอบ -->
-                <h5 class="fw-bold">รายการการทดสอบและค่า SDI (หน้า 2 เป็นต้นไป)</h5>
+                <h5 class="fw-bold">รายการการทดสอบและค่า SDI</h5>
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped table-preview">
                         <thead class="table-dark">
@@ -78,14 +72,12 @@
                 </button>
             </div>
 
-            <!-- แสดงข้อความแจ้งเตือน -->
             <div id="statusAlert" class="alert mt-3 d-none" role="alert"></div>
         </div>
     </div>
 </div>
 
 <script>
-    // ตั้งค่า Worker ของ PDF.js
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     let extractedData = null;
@@ -98,6 +90,9 @@
     const btnText = document.getElementById('btnText');
     const statusAlert = document.getElementById('statusAlert');
 
+    // ฟังก์ชันคืนค่าการหยุดพักให้ UI ได้ประมวลผล ไม่ให้หน้าเว็บ Response ไม่ทัน
+    const yieldToUI = () => new Promise(resolve => setTimeout(resolve, 10));
+
     pdfFileInput.addEventListener('change', (e) => {
         if (e.target.files.length > 0) {
             selectedFile = e.target.files[0];
@@ -105,72 +100,62 @@
         }
     });
 
-    // 1. ฟังก์ชัน อ่านและสกัดข้อมูลจาก PDF
+    // 1. อ่านไฟล์ PDF
     processBtn.addEventListener('click', async () => {
         if (!selectedFile) return;
         
         showLoading(true, "กำลังอ่านไฟล์ PDF...");
+        await yieldToUI();
         
         try {
             const arrayBuffer = await selectedFile.arrayBuffer();
             const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
             
-            // --- ดึงข้อมูล หน้า 1 (Metadata) ---
+            // --- หน้า 1 ---
             const page1 = await pdf.getPage(1);
             const textContent1 = await page1.getTextContent();
-            const page1Items = textContent1.items.map(item => item.str);
-            const page1Text = page1Items.join('\n');
+            const page1Text = textContent1.items.map(item => item.str).join('\n');
 
-            // Regex ดึงข้อมูลหน้า 1
-            const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i) || ["", "Ramathibodi Hospital (Immunology)"];
+            const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
             const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
             const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
             const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-            
-            // ชื่อโปรแกรม (เช่น IMMUNOASSAY)
-            const progMatch = page1Text.match(/(IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i) || page1Text.match(/([A-Z\s]{4,})\r?\n\s*CYCLE/i);
+            const progMatch = page1Text.match(/(IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
-            // ชื่อเครื่อง (หาบรรทัดถัดจาก LAB REF NO หรือ Regex พิเศษ)
-            let machineName = "";
-            const machineLineMatch = page1Text.match(/LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i);
-            if (machineLineMatch) {
-                machineName = machineLineMatch[1].trim();
-            } else {
-                const altMachineMatch = page1Text.match(/LABORATORY REF\. NO\.\s*[\d\.]+\s+(.*?)\s+Ramathibodi/i);
-                machineName = altMachineMatch ? altMachineMatch[1].trim() : "Unknown";
+            let machineName = "Reg (B) - Rama Immuno II";
+            const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
+            const machineMatch = page1Text.match(machineRegex);
+            if (machineMatch && machineMatch[1]) {
+                machineName = machineMatch[1].trim();
             }
 
             const metadata = {
-                orgName: orgMatch[1] ? orgMatch[1].trim() : "",
-                programName: progMatch ? progMatch[1].trim() : "",
+                orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
+                programName: progMatch ? progMatch[1].trim() : "IMMUNOASSAY",
                 refNo: refMatch ? refMatch[1] : "",
                 machineName: machineName,
                 issueDate: dateMatch ? dateMatch[1] : "",
-                cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
+                cycle: cycleSampleSampleMatch = cycleSampleMatch ? cycleSampleMatch[1] : "",
                 sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
             };
 
-            // --- ดึงข้อมูล หน้า 2 เป็นต้นไป (ชื่อการทดสอบ + SDI) ---
+            // --- หน้า 2 เป็นต้นไป ---
             const rows = [];
             for (let i = 2; i <= pdf.numPages; i++) {
+                await yieldToUI(); // ป้องกัน Browser Freeze
                 const page = await pdf.getPage(i);
                 const textContent = await page.getTextContent();
                 const pageText = textContent.items.map(item => item.str).join(' ');
 
-                // ตรวจสอบว่าหน้าเหล่านี้มีผลทดสอบ (มีคำว่า Your Result และ SDI)
                 if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-                    
-                    // ดึงชื่อการทดสอบ (ตัดเอาเฉพาะข้อความก่อนเครื่องหมาย comma)
-                    // ตัวอย่าง: "CA 125, U/ml" -> "CA 125"
                     let testName = "";
-                    const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i) || pageText.match(/([A-Z0-9\s\-\/]{2,}),/i);
+                    const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
                     if (testMatch) {
                         testName = testMatch[1].trim();
                     }
 
-                    // ดึงค่า SDI (ตัวอย่าง: Your Result 27.500 SDI -0.88 -> -0.88)
                     let sdi = "";
-                    const sdiMatch = pageText.match/SDI\s*([-\d\.]+)/i);
+                    const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
                     if (sdiMatch) {
                         sdi = sdiMatch[1];
                     }
@@ -197,7 +182,6 @@
         }
     });
 
-    // แสดงผลพรีวิวบนหน้าจอ
     function displayPreview(data) {
         document.getElementById('metaOrg').innerText = data.metadata.orgName;
         document.getElementById('metaProg').innerText = data.metadata.programName;
@@ -223,57 +207,52 @@
         document.getElementById('previewCard').classList.remove('d-none');
     }
 
-    // 2. ฟังก์ชัน ส่งข้อมูลไปยัง Google Apps Script
+    // แปลง File เป็น Base64 ด้วย Promise ป้องกันการหยุดการทำงาน
+    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+    });
+
+    // 2. ส่งข้อมูลลง Google Apps Script
     uploadBtn.addEventListener('click', async () => {
-        const gasUrl = document.getElementById('gasUrl').value.trim();
+      //  const gasUrl = document.getElementById('gasUrl').value.trim();
+        const gasUrl = 'https://script.google.com/acros/s/AKfycbx6eV8Q1ZMA5N3OacVPW_LFj5ImBWfFbdEQnIwnZeI6M012hNmLaI2khcfVGplb-gYA/exec';
         if (!gasUrl) {
             alert("กรุณากรอก Google Apps Script Web App URL ก่อนครับ");
             return;
         }
 
-        if (!extractedData || extractedData.rows.length === 0) {
-            alert("ไม่พบข้อมูลสำหรับการบันทึก");
-            return;
-        }
-
         uploadBtn.disabled = true;
-        uploadBtn.innerText = "กำลังบันทึกข้อมูลและอัปโหลดไฟล์...";
+        uploadBtn.innerText = "กำลังอัปโหลดและบันทึกข้อมูล...";
 
         try {
-            // แปลงไฟล์ PDF เป็น Base64
-            const reader = new FileReader();
-            reader.readAsDataURL(selectedFile);
-            reader.onload = async function () {
-                const base64File = reader.result;
+            const base64File = await fileToBase64(selectedFile);
 
-                const payload = {
-                    fileName: selectedFile.name,
-                    fileData: base64File,
-                    rows: extractedData.rows
-                };
-
-                // ส่งไปที่ GAS Web App
-                const response = await fetch(gasUrl, {
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
-                });
-
-                const result = await response.json();
-
-                if (result.status === "success") {
-                    showAlert("alert-success", `🎉 ${result.message} <br> <a href="${result.fileUrl}" target="_blank">เปิดดูไฟล์ PDF บน Google Drive</a>`);
-                } else {
-                    showAlert("alert-danger", "เกิดข้อผิดพลาดจาก Backend: " + result.message);
-                }
-                uploadBtn.disabled = false;
-                uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
+            const payload = {
+                fileName: selectedFile.name,
+                fileData: base64File,
+                rows: extractedData.rows
             };
 
+            const response = await fetch(gasUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+
+            if (result.status === "success") {
+                showAlert("alert-success", `🎉 ${result.message} <br> <a href="${result.fileUrl}" target="_blank" class="fw-bold">ดูไฟล์ PDF ใน Google Drive</a>`);
+            } else {
+                showAlert("alert-danger", "เกิดข้อผิดพลาดจาก Backend: " + result.message);
+            }
         } catch (error) {
             console.error(error);
             showAlert("alert-danger", "ไม่สามารถส่งข้อมูลได้: " + error.message);
+        } finally {
             uploadBtn.disabled = false;
             uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
         }
@@ -281,11 +260,11 @@
 
     function showLoading(isLoading, text) {
         if (isLoading) {
-            spinner.style.display = 'inline-block';
+            spinner.classList.remove('d-none');
             btnText.innerText = text;
             processBtn.disabled = true;
         } else {
-            spinner.style.display = 'none';
+            spinner.classList.add('d-none');
             btnText.innerText = text;
             processBtn.disabled = false;
         }
