@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบบันทึกผล EQA (RIQAS Auto Parser)</title>
+    <title>ระบบบันทึกผล EQA (RIQAS Multi-File Auto Parser)</title>
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- PDF.js Library -->
@@ -11,49 +11,43 @@
     <style>
         body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        .table-preview { font-size: 0.9rem; }
+        .table-preview { font-size: 0.85rem; }
     </style>
 </head>
 <body>
 
 <div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-lg-10">
+        <div class="col-lg-11">
             <div class="card p-4 mb-4">
-                <h3 class="card-title text-primary fw-bold mb-3">📁 ระบบอัปโหลดและสกัดข้อมูล EQA (RIQAS)</h3>
+                <h3 class="card-title text-primary fw-bold mb-3">📁 ระบบสกัดข้อมูล EQA (รองรับหลายไฟล์)</h3>
 
                 <div class="mb-3">
-                    <label class="form-label fw-semibold">เลือกไฟล์ PDF รายงาน EQA:</label>
-                    <input type="file" id="pdfFileInput" class="form-control" accept="application/pdf">
+                    <label class="form-label fw-semibold">เลือกไฟล์ PDF รายงาน EQA (กด Ctrl/Shift ค้างเพื่อเลือกหลายไฟล์):</label>
+                    <input type="file" id="pdfFileInput" class="form-control" accept="application/pdf" multiple>
+                    <div id="fileCountText" class="form-text text-muted mt-1"></div>
                 </div>
 
                 <button id="processBtn" class="btn btn-primary w-100 fw-bold py-2" disabled>
                     <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner"></span>
-                    <span id="btnText">1. อ่านและวิเคราะห์ไฟล์ PDF</span>
+                    <span id="btnText">1. อ่านและวิเคราะห์ไฟล์ PDF ทั้งหมด</span>
                 </button>
             </div>
 
             <div id="previewCard" class="card p-4 d-none">
-                <h4 class="fw-bold mb-3">📊 สรุปข้อมูลที่สกัดได้จาก PDF</h4>
-                
-                <div class="bg-light p-3 rounded mb-4 border">
-                    <div class="row g-2">
-                        <div class="col-md-6"><strong>ชื่อหน่วยงาน:</strong> <span id="metaOrg" class="text-primary">-</span></div>
-                        <div class="col-md-6"><strong>โปรแกรม EQA:</strong> <span id="metaProg" class="text-primary">-</span></div>
-                        <div class="col-md-6"><strong>LAB REF. NO.:</strong> <span id="metaRef" class="text-primary">-</span></div>
-                        <div class="col-md-6"><strong>ชื่อเครื่อง:</strong> <span id="metaMachine" class="text-primary">-</span></div>
-                        <div class="col-md-4"><strong>Issue Date:</strong> <span id="metaDate" class="text-primary">-</span></div>
-                        <div class="col-md-4"><strong>Cycle:</strong> <span id="metaCycle" class="text-primary">-</span></div>
-                        <div class="col-md-4"><strong>Sample:</strong> <span id="metaSample" class="text-primary">-</span></div>
-                    </div>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4 class="fw-bold m-0">📊 สรุปรายการข้อมูลที่สกัดได้</h4>
+                    <span class="badge bg-success fs-6" id="totalRowsBadge">0 รายการ</span>
                 </div>
 
-                <h5 class="fw-bold">รายการการทดสอบและค่า SDI</h5>
-                <div class="table-responsive">
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                     <table class="table table-bordered table-striped table-preview">
-                        <thead class="table-dark">
+                        <thead class="table-dark sticky-top">
                             <tr>
                                 <th>#</th>
+                                <th>ชื่อไฟล์</th>
+                                <th>โปรแกรม</th>
+                                <th>Cycle/Sample</th>
                                 <th>ชื่อการทดสอบ (Test Name)</th>
                                 <th>ค่า SDI</th>
                             </tr>
@@ -76,13 +70,13 @@
     // ------------------------------------------------------------------------
     // 📌 ใส่ Google Apps Script Web App URL ของคุณตรงนี้
     // ------------------------------------------------------------------------
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzR1HiuoKuWgghnldS1LwOdh7rO2KTEOX6taSGhYxeScq3HtRLd2kN2K9bocJplX-ze/exec";
+    const GAS_URL = "https://script.google.com/macros/s/ใส่_WEB_APP_ID_ของคุณที่นี่/exec";
     // ------------------------------------------------------------------------
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    let extractedData = null;
-    let selectedFile = null;
+    let batchExtractedData = []; 
+    let selectedFiles = [];
 
     const pdfFileInput = document.getElementById('pdfFileInput');
     const processBtn = document.getElementById('processBtn');
@@ -90,127 +84,140 @@
     const spinner = document.getElementById('spinner');
     const btnText = document.getElementById('btnText');
     const statusAlert = document.getElementById('statusAlert');
+    const fileCountText = document.getElementById('fileCountText');
 
     const yieldToUI = () => new Promise(resolve => setTimeout(resolve, 10));
 
     pdfFileInput.addEventListener('change', (e) => {
-        if (e.target.files.length > 0) {
-            selectedFile = e.target.files[0];
+        selectedFiles = Array.from(e.target.files);
+        if (selectedFiles.length > 0) {
+            fileCountText.innerText = `เลือกไว้ทั้งหมด ${selectedFiles.length} ไฟล์`;
             processBtn.disabled = false;
+        } else {
+            fileCountText.innerText = "";
+            processBtn.disabled = true;
         }
     });
 
-    // 1. อ่านไฟล์ PDF
+    // 1. วนลูปอ่านไฟล์ PDF ทั้งหมด
     processBtn.addEventListener('click', async () => {
-        if (!selectedFile) return;
+        if (selectedFiles.length === 0) return;
         
-        showLoading(true, "กำลังอ่านไฟล์ PDF...");
-        await yieldToUI();
-        
-        try {
-            const arrayBuffer = await selectedFile.arrayBuffer();
-            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-            
-            // --- หน้า 1 ---
-            const page1 = await pdf.getPage(1);
-            const textContent1 = await page1.getTextContent();
-            const page1Text = textContent1.items.map(item => item.str).join('\n');
+        batchExtractedData = [];
+        let totalFiles = selectedFiles.length;
 
-            const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
-            const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
-            const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
-            const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-            //const progMatch = page1Text.match(/(IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
-            // เพิ่ม IMMUNOSUPPRESSANT เข้าไปในกลุ่มชื่อโปรแกรม EQA
-            const progMatch = page1Text.match(/(IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+        for (let fileIdx = 0; fileIdx < totalFiles; fileIdx++) {
+            const file = selectedFiles[fileIdx];
+            showLoading(true, `กำลังอ่านไฟล์ที่ ${fileIdx + 1}/${totalFiles}: ${file.name}`);
+            await yieldToUI();
 
-            let machineName = "Reg (B) - Rama Immuno II";
-            const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
-            const machineMatch = page1Text.match(machineRegex);
-            if (machineMatch && machineMatch[1]) {
-                machineName = machineMatch[1].trim();
-            }
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                
+                // --- หน้า 1 ---
+                const page1 = await pdf.getPage(1);
+                const textContent1 = await page1.getTextContent();
+                const page1Text = textContent1.items.map(item => item.str).join('\n');
 
-            const metadata = {
-                orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
-                programName: progMatch ? progMatch[1].trim() : "IMMUNOASSAY",
-                refNo: refMatch ? refMatch[1] : "",
-                machineName: machineName,
-                issueDate: dateMatch ? dateMatch[1] : "",
-                cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
-                sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
-            };
+                const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
+                const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
+                const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
+                const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
+                const progMatch = page1Text.match(/(IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
-            // --- หน้า 2 เป็นต้นไป ---
-            const rows = [];
-            for (let i = 2; i <= pdf.numPages; i++) {
-                await yieldToUI();
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const pageText = textContent.items.map(item => item.str).join(' ');
+                let machineName = "Reg (B) - Rama Immuno II";
+                const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
+                const machineMatch = page1Text.match(machineRegex);
+                if (machineMatch && machineMatch[1]) {
+                    machineName = machineMatch[1].trim();
+                }
 
-                if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-                    let testName = "";
-                    const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
-                    if (testMatch) {
-                                        testName = testMatch[1]
-                                        .replace(/.*?Standard Deviation\s*/i, '')
-                                        // เพิ่ม IMMUNOSUPPRESSANT ในการลบชื่อโปรแกรมที่อาจติดมาหน้าชื่อการทดสอบ
-                                        .replace(/.*?(IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
-                                        .replace(/^[\d\s\+\-\.]+/g, '')
-                                        .trim();
-                                }
+                const metadata = {
+                    orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
+                    programName: progMatch ? progMatch[1].trim() : "IMMUNOASSAY",
+                    refNo: refMatch ? refMatch[1] : "",
+                    machineName: machineName,
+                    issueDate: dateMatch ? dateMatch[1] : "",
+                    cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
+                    sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
+                };
 
-                    let sdi = "";
-                    const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
-                    if (sdiMatch) {
-                        sdi = sdiMatch[1];
-                    }
+                // --- หน้า 2 เป็นต้นไป ---
+                const fileRows = [];
+                for (let i = 2; i <= pdf.numPages; i++) {
+                    await yieldToUI();
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
 
-                    if (testName && sdi) {
-                        rows.push({
-                            ...metadata,
-                            testName: testName,
-                            sdi: sdi
-                        });
+                    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
+                        let testName = "";
+                        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+                        if (testMatch) {
+                            testName = testMatch[1]
+                                .replace(/.*?Standard Deviation\s*/i, '')
+                                .replace(/.*?(IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
+                                .replace(/^[\d\s\+\-\.]+/g, '')
+                                .trim();
+                        }
+
+                        let sdi = "";
+                        const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
+                        if (sdiMatch) {
+                            sdi = sdiMatch[1];
+                        }
+
+                        if (testName && sdi) {
+                            fileRows.push({
+                                ...metadata,
+                                testName: testName,
+                                sdi: sdi
+                            });
+                        }
                     }
                 }
+
+                batchExtractedData.push({
+                    file: file,
+                    fileName: file.name,
+                    rows: fileRows
+                });
+
+            } catch (error) {
+                console.error(`เกิดข้อผิดพลาดในการอ่านไฟล์ ${file.name}:`, error);
             }
-
-            extractedData = { metadata, rows };
-            displayPreview(extractedData);
-            showAlert("d-none", "");
-
-        } catch (error) {
-            console.error(error);
-            showAlert("alert-danger", "เกิดข้อผิดพลาดในการอ่านไฟล์ PDF: " + error.message);
-        } finally {
-            showLoading(false, "1. อ่านและวิเคราะห์ไฟล์ PDF");
         }
+
+        showLoading(false, "1. อ่านและวิเคราะห์ไฟล์ PDF ทั้งหมด");
+        displayPreview(batchExtractedData);
+        showAlert("d-none", "");
     });
 
-    function displayPreview(data) {
-        document.getElementById('metaOrg').innerText = data.metadata.orgName;
-        document.getElementById('metaProg').innerText = data.metadata.programName;
-        document.getElementById('metaRef').innerText = data.metadata.refNo;
-        document.getElementById('metaMachine').innerText = data.metadata.machineName;
-        document.getElementById('metaDate').innerText = data.metadata.issueDate;
-        document.getElementById('metaCycle').innerText = data.metadata.cycle;
-        document.getElementById('metaSample').innerText = data.metadata.sample;
-
+    function displayPreview(batchData) {
         const tbody = document.getElementById('testRowsBody');
         tbody.innerHTML = "";
         
-        data.rows.forEach((row, idx) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${idx + 1}</td>
-                <td class="fw-bold">${row.testName}</td>
-                <td class="text-danger fw-bold">${row.sdi}</td>
-            `;
-            tbody.appendChild(tr);
+        let globalIndex = 1;
+        let totalRows = 0;
+
+        batchData.forEach(item => {
+            item.rows.forEach(row => {
+                totalRows++;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${globalIndex++}</td>
+                    <td class="text-truncate" style="max-width: 150px;" title="${item.fileName}">${item.fileName}</td>
+                    <td>${row.programName}</td>
+                    <td>C${row.cycle}/S${row.sample}</td>
+                    <td class="fw-bold">${row.testName}</td>
+                    <td class="text-danger fw-bold">${row.sdi}</td>
+                `;
+                tbody.appendChild(tr);
+            });
         });
 
+        document.getElementById('totalRowsBadge').innerText = `${totalRows} รายการ จาก ${batchData.length} ไฟล์`;
         document.getElementById('previewCard').classList.remove('d-none');
     }
 
@@ -221,53 +228,54 @@
         reader.onerror = (error) => reject(error);
     });
 
-    // 2. ส่งข้อมูลลง Google Apps Script
-uploadBtn.addEventListener('click', async () => {
-    if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
-        alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
-        return;
-    }
-
-    uploadBtn.disabled = true;
-    uploadBtn.innerText = "กำลังอัปโหลดและบันทึกข้อมูล...";
-
-    try {
-        const base64File = await fileToBase64(selectedFile);
-
-        const payload = {
-            fileName: selectedFile.name,
-            fileData: base64File,
-            rows: extractedData.rows
-        };
-
-        // ใช้ Content-Type: text/plain เพื่อเลี่ยงการส่ง CORS Preflight (OPTIONS request)
-        const response = await fetch(GAS_URL, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'text/plain;charset=utf-8' 
-            },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+    // 2. ทยอยส่งข้อมูลลง Google Apps Script ทีละไฟล์
+    uploadBtn.addEventListener('click', async () => {
+        if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
+            alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
+            return;
         }
 
-        const result = await response.json();
+        uploadBtn.disabled = true;
+        let successCount = 0;
+        let totalFiles = batchExtractedData.length;
 
-        if (result.status === "success") {
-            showAlert("alert-success", `🎉 ${result.message} <br> <a href="${result.fileUrl}" target="_blank" class="fw-bold">ดูไฟล์ PDF ใน Google Drive</a>`);
-        } else {
-            showAlert("alert-danger", "เกิดข้อผิดพลาดจาก Backend: " + result.message);
+        for (let i = 0; i < totalFiles; i++) {
+            const item = batchExtractedData[i];
+            uploadBtn.innerText = `กำลังอัปโหลดไฟล์ที่ ${i + 1}/${totalFiles} (${item.fileName})...`;
+
+            try {
+                const base64File = await fileToBase64(item.file);
+
+                const payload = {
+                    fileName: item.fileName,
+                    fileData: base64File,
+                    rows: item.rows
+                };
+
+                const response = await fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                if (result.status === "success") {
+                    successCount++;
+                }
+            } catch (error) {
+                console.error(`เกิดข้อผิดพลาดในการส่งไฟล์ ${item.fileName}:`, error);
+            }
         }
-    } catch (error) {
-        console.error(error);
-        showAlert("alert-danger", "ไม่สามารถส่งข้อมูลได้: " + error.message + " (ตรวจสอบสิทธิ์การเข้าถึง Web App ใน GAS)");
-    } finally {
+
         uploadBtn.disabled = false;
         uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
-    }
-});
+
+        if (successCount === totalFiles) {
+            showAlert("alert-success", `🎉 บันทึกข้อมูลเรียบร้อยแล้วทั้งหมด ${successCount} ไฟล์!`);
+        } else {
+            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
+        }
+    });
 
     function showLoading(isLoading, text) {
         if (isLoading) {
