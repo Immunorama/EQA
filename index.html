@@ -120,7 +120,9 @@
             const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
             const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
             const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-            const progMatch = page1Text.match(/(IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+            //const progMatch = page1Text.match(/(IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+            // เพิ่ม IMMUNOSUPPRESSANT เข้าไปในกลุ่มชื่อโปรแกรม EQA
+            const progMatch = page1Text.match(/(IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
             let machineName = "Reg (B) - Rama Immuno II";
             const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
@@ -151,12 +153,13 @@
                     let testName = "";
                     const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
                     if (testMatch) {
-                        testName = testMatch[1]
-                            .replace(/.*?Standard Deviation\s*/i, '')
-                            .replace(/.*?IMMUNOASSAY\s*/i, '')
-                            .replace(/^[\d\s\+\-\.]+/g, '')
-                            .trim();
-                    }
+                                        testName = testMatch[1]
+                                        .replace(/.*?Standard Deviation\s*/i, '')
+                                        // เพิ่ม IMMUNOSUPPRESSANT ในการลบชื่อโปรแกรมที่อาจติดมาหน้าชื่อการทดสอบ
+                                        .replace(/.*?(IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
+                                        .replace(/^[\d\s\+\-\.]+/g, '')
+                                        .trim();
+                                }
 
                     let sdi = "";
                     const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
