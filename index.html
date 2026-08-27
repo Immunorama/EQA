@@ -4,14 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ระบบบันทึกผล EQA (RIQAS Multi-File Auto Parser)</title>
-    <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- PDF.js Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
         .table-preview { font-size: 0.85rem; }
+        .badge-sdi-out { background-color: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -50,6 +49,7 @@
                                 <th>Cycle/Sample</th>
                                 <th>ชื่อการทดสอบ (Test Name)</th>
                                 <th>ค่า SDI</th>
+                                <th>การดำเนินการ</th>
                             </tr>
                         </thead>
                         <tbody id="testRowsBody"></tbody>
@@ -67,11 +67,7 @@
 </div>
 
 <script>
-    // ------------------------------------------------------------------------
-    // 📌 ใส่ Google Apps Script Web App URL ของคุณตรงนี้
-    // ------------------------------------------------------------------------
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzR1HiuoKuWgghnldS1LwOdh7rO2KTEOX6taSGhYxeScq3HtRLd2kN2K9bocJplX-ze/exec";
-    // ------------------------------------------------------------------------
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbzR1HiuoWgghnldS1LwOdh7rO2KTEOX6taSGhYxeScq3HtRLd2kN2K9bocJplX-ze/exec";
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -99,7 +95,6 @@
         }
     });
 
-    // 1. วนลูปอ่านไฟล์ PDF ทั้งหมด
     processBtn.addEventListener('click', async () => {
         if (selectedFiles.length === 0) return;
         
@@ -115,7 +110,7 @@
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 
-                // --- หน้า 1 ---
+                // หน้า 1
                 const page1 = await pdf.getPage(1);
                 const textContent1 = await page1.getTextContent();
                 const page1Text = textContent1.items.map(item => item.str).join('\n');
@@ -124,8 +119,6 @@
                 const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
                 const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
                 const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-                //const progMatch = page1Text.match(/(IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
-                // เพิ่ม IMMUNOASSAY SPECIALITY ไว้ด้านหน้าสุด (รองรับทั้งเลขโรมัน I และเลขอารบิก 1)
                 const progMatch = page1Text.match(/(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
                 let machineName = "Reg (B) - Rama Immuno II";
@@ -145,7 +138,7 @@
                     sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
                 };
 
-                // --- หน้า 2 เป็นต้นไป ---
+                // หน้า 2 เป็นต้นไป
                 const fileRows = [];
                 for (let i = 2; i <= pdf.numPages; i++) {
                     await yieldToUI();
@@ -157,13 +150,12 @@
                         let testName = "";
                         const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
                         if (testMatch) {
-                                        testName = testMatch[1]
-                                            .replace(/.*?Standard Deviation\s*/i, '')
-                                            // ตัด IMMUNOASSAY SPECIALITY ออกจากส่วนหัวข้อความ
-                                            .replace(/.*?(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
-                                            .replace(/^[\d\s\+\-\.]+/g, '')
-                                            .trim();
-                                    }
+                            testName = testMatch[1]
+                                .replace(/.*?Standard Deviation\s*/i, '')
+                                .replace(/.*?(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
+                                .replace(/^[\d\s\+\-\.]+/g, '')
+                                .trim();
+                        }
 
                         let sdi = "";
                         const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
@@ -207,6 +199,9 @@
         batchData.forEach(item => {
             item.rows.forEach(row => {
                 totalRows++;
+                const sdiVal = parseFloat(row.sdi);
+                const isOutOfLimit = !isNaN(sdiVal) && Math.abs(sdiVal) > 2;
+
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${globalIndex++}</td>
@@ -214,7 +209,8 @@
                     <td>${row.programName}</td>
                     <td>C${row.cycle}/S${row.sample}</td>
                     <td class="fw-bold">${row.testName}</td>
-                    <td class="text-danger fw-bold">${row.sdi}</td>
+                    <td class="${isOutOfLimit ? 'text-danger fw-bold' : ''}">${row.sdi}</td>
+                    <td>${isOutOfLimit ? '<span class="badge-sdi-out">⚠️ สร้างแบบบันทึก Incident PDF</span>' : '<span class="text-muted">ปกติ</span>'}</td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -231,7 +227,6 @@
         reader.onerror = (error) => reject(error);
     });
 
-    // 2. ทยอยส่งข้อมูลลง Google Apps Script ทีละไฟล์
     uploadBtn.addEventListener('click', async () => {
         if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
             alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
@@ -274,7 +269,7 @@
         uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
 
         if (successCount === totalFiles) {
-            showAlert("alert-success", `🎉 บันทึกข้อมูลเรียบร้อยแล้วทั้งหมด ${successCount} ไฟล์!`);
+            showAlert("alert-success", `🎉 บันทึกข้อมูลและสร้างเอกสารตรวจสอบเรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
         } else {
             showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
         }
