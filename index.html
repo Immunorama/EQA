@@ -1,302 +1,360 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบบันทึกผล EQA (RIQAS Multi-File Auto Parser)</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <style>
-        body { background-color: #f4f6f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .card { border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
-        .table-preview { font-size: 0.85rem; }
-        .badge-sdi-out { background-color: #dc3545; color: white; padding: 4px 8px; border-radius: 4px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบบันทึกข้อมูล EQA & ออกรายงาน NC</title>
+  <!-- Bootstrap 5 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Google Fonts (Prompt) -->
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      background-color: #f4f7f6;
+      color: #333;
+    }
+    .card {
+      border: none;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .card-header {
+      border-radius: 12px 12px 0 0 !important;
+      font-weight: 600;
+    }
+    .nc-section {
+      background-color: #fff8f8;
+      border: 1px solid #f5c2c7;
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .form-label {
+      font-weight: 500;
+    }
+    .btn-primary {
+      background-color: #0d6efd;
+      border: none;
+      padding: 10px 24px;
+      font-weight: 500;
+    }
+  </style>
 </head>
-<body>
+<body class="py-4">
 
-<div class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-lg-11">
-            <div class="card p-4 mb-4">
-                <h3 class="card-title text-primary fw-bold mb-3">📁 ระบบสกัดข้อมูล EQA (รองรับหลายไฟล์)</h3>
-
-                <div class="mb-3">
-                    <label class="form-label fw-semibold">เลือกไฟล์ PDF รายงาน EQA (กด Ctrl/Shift ค้างเพื่อเลือกหลายไฟล์):</label>
-                    <input type="file" id="pdfFileInput" class="form-control" accept="application/pdf" multiple>
-                    <div id="fileCountText" class="form-text text-muted mt-1"></div>
-                </div>
-
-                <button id="processBtn" class="btn btn-primary w-100 fw-bold py-2" disabled>
-                    <span class="spinner-border spinner-border-sm me-2 d-none" id="spinner"></span>
-                    <span id="btnText">1. อ่านและวิเคราะห์ไฟล์ PDF ทั้งหมด</span>
-                </button>
-            </div>
-
-            <div id="previewCard" class="card p-4 d-none">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h4 class="fw-bold m-0">📊 สรุปรายการข้อมูลที่สกัดได้</h4>
-                    <span class="badge bg-success fs-6" id="totalRowsBadge">0 รายการ</span>
-                </div>
-
-                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
-                    <table class="table table-bordered table-striped table-preview">
-                        <thead class="table-dark sticky-top">
-                            <tr>
-                                <th>#</th>
-                                <th>ชื่อไฟล์</th>
-                                <th>โปรแกรม</th>
-                                <th>Cycle/Sample</th>
-                                <th>ชื่อการทดสอบ (Test Name)</th>
-                                <th>ค่า SDI</th>
-                                <th>การดำเนินการ</th>
-                            </tr>
-                        </thead>
-                        <tbody id="testRowsBody"></tbody>
-                    </table>
-                </div>
-
-                <button id="uploadBtn" class="btn btn-success w-100 fw-bold py-2 mt-3">
-                    2. บันทึกข้อมูลลง Google Sheet & Drive
-                </button>
-            </div>
-
-            <div id="statusAlert" class="alert mt-3 d-none" role="alert"></div>
-        </div>
+  <div class="container" style="max-width: 900px;">
+    
+    <!-- Title -->
+    <div class="text-center mb-4">
+      <h2 class="fw-bold text-primary">ระบบบันทึกผลการทดสอบ EQA</h2>
+      <p class="text-muted">บันทึกข้อมูลผลการตรวจวิเคราะห์ พร้อมระบบตรวจสอบและออกเอกสาร NC อัตโนมัติ</p>
     </div>
-</div>
 
-<script>
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbysu4BVsoQss4YK62dRZ-7fOBYwej8HN0lMbVjAICeaahufTMNOEPQV4jw5d2a8q7g/exec";
+    <form id="eqaForm" onsubmit="handleFormSubmit(event)">
+      
+      <!-- 1. ข้อมูลทั่วไปและไฟล์ PDF ต้นฉบับ -->
+      <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-file-earmark-text"></i> 1. ข้อมูลทั่วไปและแนบรายงาน PDF
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            
+            <div class="col-md-12">
+              <label for="pdfFile" class="form-label">แนบไฟล์ PDF ต้นฉบับ:</label>
+              <input type="file" class="form-control" id="pdfFile" accept="application/pdf" required>
+            </div>
 
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+            <div class="col-md-6">
+              <label for="orgName" class="form-label">ชื่อหน่วยงาน:</label>
+              <input type="text" class="form-control" id="orgName" required placeholder="เช่น ห้องปฏิบัติการ..." value="ห้องปฏิบัติการชันสูตร">
+            </div>
 
-    let batchExtractedData = []; 
-    let selectedFiles = [];
+            <div class="col-md-6">
+              <label for="programName" class="form-label">ชื่อโปรแกรม EQA:</label>
+              <input type="text" class="form-control" id="programName" required placeholder="เช่น EQAC, EQAT">
+            </div>
 
-    const pdfFileInput = document.getElementById('pdfFileInput');
-    const processBtn = document.getElementById('processBtn');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const spinner = document.getElementById('spinner');
-    const btnText = document.getElementById('btnText');
-    const statusAlert = document.getElementById('statusAlert');
-    const fileCountText = document.getElementById('fileCountText');
+            <div class="col-md-6">
+              <label for="refNo" class="form-label">LABORATORY REF. NO.:</label>
+              <input type="text" class="form-control" id="refNo" required placeholder="ระบุ Ref No.">
+            </div>
 
-    const yieldToUI = () => new Promise(resolve => setTimeout(resolve, 10));
+            <div class="col-md-6">
+              <label for="machineName" class="form-label">ชื่อเครื่องมือ:</label>
+              <select class="form-select" id="machineName" required>
+                <option value="" selected disabled>-- เลือกเครื่องมือ --</option>
+                <option value="Alinity c Leanlab">Alinity c Leanlab</option>
+                <option value="Alinity c SDMC">Alinity c SDMC</option>
+                <option value="Alinity i Leanlab">Alinity i Leanlab</option>
+                <option value="Alinity i SDMC">Alinity i SDMC</option>
+                <option value="C503">C503</option>
+                <option value="C513">C513</option>
+                <option value="E801 Leanlab">E801 Leanlab</option>
+                <option value="E801 SDMC">E801 SDMC</option>
+                <option value="Laiason">Laiason</option>
+              </select>
+            </div>
 
-    pdfFileInput.addEventListener('change', (e) => {
-        selectedFiles = Array.from(e.target.files);
-        if (selectedFiles.length > 0) {
-            fileCountText.innerText = `เลือกไว้ทั้งหมด ${selectedFiles.length} ไฟล์`;
-            processBtn.disabled = false;
-        } else {
-            fileCountText.innerText = "";
-            processBtn.disabled = true;
-        }
+            <div class="col-md-4">
+              <label for="issueDate" class="form-label">Issue Date:</label>
+              <input type="date" class="form-control" id="issueDate" required>
+            </div>
+
+            <div class="col-md-4">
+              <label for="cycle" class="form-label">Cycle:</label>
+              <input type="text" class="form-control" id="cycle" required placeholder="เช่น 1">
+            </div>
+
+            <div class="col-md-4">
+              <label for="sample" class="form-label">Sample:</label>
+              <input type="text" class="form-control" id="sample" required placeholder="เช่น A">
+            </div>
+
+            <div class="col-md-6">
+              <label for="testName" class="form-label">ชื่อการทดสอบ:</label>
+              <input type="text" class="form-control" id="testName" required placeholder="เช่น Glucose, Cholesterol">
+            </div>
+
+            <div class="col-md-6">
+              <label for="sdi" class="form-label">ค่า SDI:</label>
+              <input type="number" step="0.01" class="form-control" id="sdi" required placeholder="เช่น 2.15 หรือ -2.3" oninput="checkSDICondition()">
+              <div class="form-text">หากค่า SDI > 2 หรือ < -2 ระบบจะเปิดแบบบันทึกการตรวจสอบ (NC) ให้อัตโนมัติ</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. แบบบันทึกการตรวจสอบ (NC) - แสดงเมื่อ |SDI| > 2 -->
+      <div id="ncSection" class="nc-section mb-4" style="display: none;">
+        <h4 class="text-danger fw-bold mb-3">⚠️ แบบบันทึกการตรวจสอบ (NC Case: |SDI| > 2)</h4>
+        
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="invDate" class="form-label">วัน เดือน ปี ที่ทำการตรวจสอบ:</label>
+            <input type="date" class="form-control" id="invDate">
+          </div>
+
+          <!-- ข้อที่ 1 -->
+          <div class="col-12">
+            <label for="check1" class="form-label">1. การทวนสอบการรายงานผล:</label>
+            <select class="form-select" id="check1" onchange="toggleOtherInput('check1', 'check1Other')">
+              <option value="ทวนสอบการรายงานผลของตัวอย่างตรวจในวันที่ทำการทดสอบพบว่ารายงายผล ถูกต้อง">1. ทวนสอบการรายงานผลของตัวอย่างตรวจในวันที่ทำการทดสอบพบว่ารายงายผล ถูกต้อง</option>
+              <option value="ทวนสอบการรายงานผลของตัวอย่างตรวจในวันที่ทำการทดสอบพบว่ารายงายผล ไม่ถูกต้อง">1. ทวนสอบการรายงานผลของตัวอย่างตรวจในวันที่ทำการทดสอบพบว่ารายงายผล ไม่ถูกต้อง</option>
+              <option value="อื่นๆ">1. อื่นๆ</option>
+              <option value="-">1. -</option>
+            </select>
+            <input type="text" class="form-control mt-2" id="check1Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
+          </div>
+
+          <!-- ข้อที่ 2 -->
+          <div class="col-12">
+            <label for="check2" class="form-label">2. ตรวจสอบการทำ Maintenance:</label>
+            <select class="form-select" id="check2" onchange="toggleOtherInput('check2', 'check2Other')">
+              <option value="ตรวจสอบพบว่ามีการทำ Maintenance เครื่องวิเคราะห์อัตโนมัติในวันที่ทำการทดสอบตัวอย่าง">2. ตรวจสอบพบว่ามีการทำ Maintenance เครื่องวิเคราะห์อัตโนมัติในวันที่ทำการทดสอบตัวอย่าง</option>
+              <option value="ตรวจสอบพบว่าไม่มีการทำ Maintenance เครื่องวิเคราะห์อัตโนมัติในวันที่ทำการทดสอบตัวอย่าง">2. ตรวจสอบพบว่าไม่มีการทำ Maintenance เครื่องวิเคราะห์อัตโนมัติในวันที่ทำการทดสอบตัวอย่าง</option>
+              <option value="อื่นๆ">2. อื่นๆ</option>
+              <option value="-">2. -</option>
+            </select>
+            <input type="text" class="form-control mt-2" id="check2Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
+          </div>
+
+          <!-- ข้อที่ 3 -->
+          <div class="col-12">
+            <label for="check3" class="form-label">3. ทวนสอบค่า IQC:</label>
+            <select class="form-select" id="check3" onchange="toggleOtherInput('check3', 'check3Other')">
+              <option value="ทวนสอบค่า IQC ของการตรวจวิเคราะห์ในวันที่ทำการทดสอบตัวอย่างตรวจอยู่ในช่วงที่กำหนด">3. ทวนสอบค่า IQC ของการตรวจวิเคราะห์ในวันที่ทำการทดสอบตัวอย่างตรวจอยู่ในช่วงที่กำหนด</option>
+              <option value="ทวนสอบค่า IQC ของการตรวจวิเคราะห์ในวันที่ทำการทดสอบตัวอย่างตรวจมีค่ามากกว่า 2SD">3. ทวนสอบค่า IQC ของการตรวจวิเคราะห์ในวันที่ทำการทดสอบตัวอย่างตรวจมีค่ามากกว่า 2SD</option>
+              <option value="ทวนสอบค่า IQC ของการตรวจวิเคราะห์ในวันที่ทำการทดสอบตัวอย่างตรวจมีค่ามากกว่า -2SD">3. ทวนสอบค่า IQC ของการตรวจวิเคราะห์ในวันที่ทำการทดสอบตัวอย่างตรวจมีค่ามากกว่า -2SD</option>
+              <option value="อื่นๆ">3. อื่นๆ</option>
+              <option value="-">3. -</option>
+            </select>
+            <input type="text" class="form-control mt-2" id="check3Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
+          </div>
+
+          <!-- ข้อที่ 4 -->
+          <div class="col-12">
+            <label for="check4" class="form-label">4. อื่นๆ:</label>
+            <select class="form-select" id="check4" onchange="toggleOtherInput('check4', 'check4Other')">
+              <option value="อื่นๆ">4. อื่นๆ</option>
+              <option value="-" selected>4. -</option>
+            </select>
+            <input type="text" class="form-control mt-2" id="check4Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
+          </div>
+
+          <!-- ข้อที่ 5 -->
+          <div class="col-12">
+            <label for="check5" class="form-label">5. อื่นๆ:</label>
+            <select class="form-select" id="check5" onchange="toggleOtherInput('check5', 'check5Other')">
+              <option value="อื่นๆ">5. อื่นๆ</option>
+              <option value="-" selected>5. -</option>
+            </select>
+            <input type="text" class="form-control mt-2" id="check5Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
+          </div>
+
+          <!-- ผู้บันทึก และ ผู้ตรวจสอบ -->
+          <div class="col-md-6 mt-3">
+            <label class="form-label">ชื่อผู้บันทึก:</label>
+            <input type="text" class="form-control bg-light" id="recName" value="อาริยา ถนอมศักดิ์ยุทธ" readonly>
+          </div>
+          <div class="col-md-6 mt-3">
+            <label class="form-label">ชื่อผู้ตรวจสอบ:</label>
+            <input type="text" class="form-control bg-light" id="verName" value="ชวชล เศษฐอุดม" readonly>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="text-center">
+        <button type="submit" id="submitBtn" class="btn btn-primary btn-lg shadow">
+          บันทึกข้อมูลลง Google Sheet & Drive
+        </button>
+      </div>
+
+    </form>
+
+    <!-- Alert Response Status -->
+    <div id="statusAlert" class="mt-4" style="display: none;"></div>
+
+  </div>
+
+  <script>
+    // 📌 วาง Web App URL จากการ Deploy ใน Google Apps Script ตรงนี้
+    const GAS_URL = "วาง_WEB_APP_URL_ตรงนี้";
+
+    // กำหนดวันที่ปัจจุบันในช่อง date อัตโนมัติ
+    document.addEventListener("DOMContentLoaded", () => {
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('issueDate').value = today;
+      document.getElementById('invDate').value = today;
     });
 
-    processBtn.addEventListener('click', async () => {
-        if (selectedFiles.length === 0) return;
-        
-        batchExtractedData = [];
-        let totalFiles = selectedFiles.length;
-
-        for (let fileIdx = 0; fileIdx < totalFiles; fileIdx++) {
-            const file = selectedFiles[fileIdx];
-            showLoading(true, `กำลังอ่านไฟล์ที่ ${fileIdx + 1}/${totalFiles}: ${file.name}`);
-            await yieldToUI();
-
-            try {
-                const arrayBuffer = await file.arrayBuffer();
-                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-                
-                // หน้า 1
-                const page1 = await pdf.getPage(1);
-                const textContent1 = await page1.getTextContent();
-                const page1Text = textContent1.items.map(item => item.str).join('\n');
-
-                const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
-                const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
-                const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
-                const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-                const progMatch = page1Text.match(/(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
-
-                let machineName = "Reg (B) - Rama Immuno II";
-                const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
-                const machineMatch = page1Text.match(machineRegex);
-                if (machineMatch && machineMatch[1]) {
-                    machineName = machineMatch[1].trim();
-                }
-
-                const metadata = {
-                    orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
-                    programName: progMatch ? progMatch[1].trim() : "IMMUNOASSAY",
-                    refNo: refMatch ? refMatch[1] : "",
-                    machineName: machineName,
-                    issueDate: dateMatch ? dateMatch[1] : "",
-                    cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
-                    sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
-                };
-
-                // หน้า 2 เป็นต้นไป
-                const fileRows = [];
-                for (let i = 2; i <= pdf.numPages; i++) {
-                    await yieldToUI();
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
-
-                    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-                        let testName = "";
-                        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
-                        if (testMatch) {
-                            testName = testMatch[1]
-                                .replace(/.*?Standard Deviation\s*/i, '')
-                                .replace(/.*?(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
-                                .replace(/^[\d\s\+\-\.]+/g, '')
-                                .trim();
-                        }
-
-                        let sdi = "";
-                        const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
-                        if (sdiMatch) {
-                            sdi = sdiMatch[1];
-                        }
-
-                        if (testName && sdi) {
-                            fileRows.push({
-                                ...metadata,
-                                testName: testName,
-                                sdi: sdi
-                            });
-                        }
-                    }
-                }
-
-                batchExtractedData.push({
-                    file: file,
-                    fileName: file.name,
-                    rows: fileRows
-                });
-
-            } catch (error) {
-                console.error(`เกิดข้อผิดพลาดในการอ่านไฟล์ ${file.name}:`, error);
-            }
-        }
-
-        showLoading(false, "1. อ่านและวิเคราะห์ไฟล์ PDF ทั้งหมด");
-        displayPreview(batchExtractedData);
-        showAlert("d-none", "");
-    });
-
-    function displayPreview(batchData) {
-        const tbody = document.getElementById('testRowsBody');
-        tbody.innerHTML = "";
-        
-        let globalIndex = 1;
-        let totalRows = 0;
-
-        batchData.forEach(item => {
-            item.rows.forEach(row => {
-                totalRows++;
-                const sdiVal = parseFloat(row.sdi);
-                const isOutOfLimit = !isNaN(sdiVal) && Math.abs(sdiVal) > 2;
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td>${globalIndex++}</td>
-                    <td class="text-truncate" style="max-width: 150px;" title="${item.fileName}">${item.fileName}</td>
-                    <td>${row.programName}</td>
-                    <td>C${row.cycle}/S${row.sample}</td>
-                    <td class="fw-bold">${row.testName}</td>
-                    <td class="${isOutOfLimit ? 'text-danger fw-bold' : ''}">${row.sdi}</td>
-                    <td>${isOutOfLimit ? '<span class="badge-sdi-out">⚠️ สร้างแบบบันทึก Incident PDF</span>' : '<span class="text-muted">ปกติ</span>'}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        });
-
-        document.getElementById('totalRowsBadge').innerText = `${totalRows} รายการ จาก ${batchData.length} ไฟล์`;
-        document.getElementById('previewCard').classList.remove('d-none');
+    // เช็คค่า SDI เพื่อแสดง/ซ่อน ส่วนฟอร์ม NC
+    function checkSDICondition() {
+      const sdiVal = parseFloat(document.getElementById('sdi').value);
+      const ncSection = document.getElementById('ncSection');
+      
+      if (!isNaN(sdiVal) && Math.abs(sdiVal) > 2) {
+        ncSection.style.display = 'block';
+      } else {
+        ncSection.style.display = 'none';
+      }
     }
 
-    const fileToBase64 = (file) => new Promise((resolve, reject) => {
+    // เปิด-ปิด ช่องกรอก Free-text เมื่อเลือก "อื่นๆ"
+    function toggleOtherInput(selectId, inputId) {
+      const selectElem = document.getElementById(selectId);
+      const inputElem = document.getElementById(inputId);
+      
+      if (selectElem.value.includes("อื่นๆ")) {
+        inputElem.style.display = "block";
+        inputElem.required = true;
+      } else {
+        inputElem.style.display = "none";
+        inputElem.required = false;
+        inputElem.value = "";
+      }
+    }
+
+    // แปลงไฟล์ PDF เป็น Base64
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = () => resolve(reader.result);
-        reader.onerror = (error) => reject(error);
-    });
-
-    uploadBtn.addEventListener('click', async () => {
-        if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
-            alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
-            return;
-        }
-
-        uploadBtn.disabled = true;
-        let successCount = 0;
-        let totalFiles = batchExtractedData.length;
-
-        for (let i = 0; i < totalFiles; i++) {
-            const item = batchExtractedData[i];
-            uploadBtn.innerText = `กำลังอัปโหลดไฟล์ที่ ${i + 1}/${totalFiles} (${item.fileName})...`;
-
-            try {
-                const base64File = await fileToBase64(item.file);
-
-                const payload = {
-                    fileName: item.fileName,
-                    fileData: base64File,
-                    rows: item.rows
-                };
-
-                const response = await fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                    body: JSON.stringify(payload)
-                });
-
-                const result = await response.json();
-                if (result.status === "success") {
-                    successCount++;
-                }
-            } catch (error) {
-                console.error(`เกิดข้อผิดพลาดในการส่งไฟล์ ${item.fileName}:`, error);
-            }
-        }
-
-        uploadBtn.disabled = false;
-        uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
-
-        if (successCount === totalFiles) {
-            showAlert("alert-success", `🎉 บันทึกข้อมูลและสร้างเอกสารตรวจสอบเรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
-        } else {
-            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
-        }
-    });
-
-    function showLoading(isLoading, text) {
-        if (isLoading) {
-            spinner.classList.remove('d-none');
-            btnText.innerText = text;
-            processBtn.disabled = true;
-        } else {
-            spinner.classList.add('d-none');
-            btnText.innerText = text;
-            processBtn.disabled = false;
-        }
+        reader.onerror = error => reject(error);
+      });
     }
 
-    function showAlert(type, message) {
-        statusAlert.className = `alert mt-3 ${type}`;
-        statusAlert.innerHTML = message;
-        if (type === "d-none") {
-            statusAlert.classList.add('d-none');
-        } else {
-            statusAlert.classList.remove('d-none');
+    // ส่งข้อมูลฟอร์มไปยัง Google Apps Script
+    async function handleFormSubmit(event) {
+      event.preventDefault();
+      
+      const submitBtn = document.getElementById('submitBtn');
+      const statusAlert = document.getElementById('statusAlert');
+      
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> กำลังบันทึกข้อมูล...`;
+      statusAlert.style.display = 'none';
+
+      try {
+        const fileInput = document.getElementById('pdfFile');
+        let fileData = null;
+        let fileName = null;
+
+        if (fileInput.files.length > 0) {
+          const file = fileInput.files[0];
+          fileData = await fileToBase64(file);
+          fileName = file.name;
         }
+
+        // แปลงฟอร์แมตวันที่จาก YYYY-MM-DD เป็น DD/MM/YYYY
+        const formatDate = (dateStr) => {
+          if (!dateStr) return "";
+          const [y, m, d] = dateStr.split('-');
+          return `${d}/${m}/${y}`;
+        };
+
+        const rowData = {
+          orgName: document.getElementById('orgName').value,
+          programName: document.getElementById('programName').value,
+          refNo: document.getElementById('refNo').value,
+          machineName: document.getElementById('machineName').value,
+          issueDate: formatDate(document.getElementById('issueDate').value),
+          cycle: document.getElementById('cycle').value,
+          sample: document.getElementById('sample').value,
+          testName: document.getElementById('testName').value,
+          sdi: document.getElementById('sdi').value,
+          invDate: formatDate(document.getElementById('invDate').value),
+          check1: document.getElementById('check1').value,
+          check1Other: document.getElementById('check1Other').value,
+          check2: document.getElementById('check2').value,
+          check2Other: document.getElementById('check2Other').value,
+          check3: document.getElementById('check3').value,
+          check3Other: document.getElementById('check3Other').value,
+          check4: document.getElementById('check4').value,
+          check4Other: document.getElementById('check4Other').value,
+          check5: document.getElementById('check5').value,
+          check5Other: document.getElementById('check5Other').value,
+          recName: document.getElementById('recName').value,
+          verName: document.getElementById('verName').value
+        };
+
+        const payload = {
+          fileName: fileName,
+          fileData: fileData,
+          rows: [rowData]
+        };
+
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (result.status === "success") {
+          statusAlert.className = "alert alert-success shadow-sm";
+          statusAlert.innerHTML = `<strong>สำเร็จ!</strong> ${result.message} <br> <a href="${result.fileUrl}" target="_blank" class="alert-link">คลิกเพื่อดูไฟล์ PDF ต้นฉบับที่อัปโหลด</a>`;
+          document.getElementById('eqaForm').reset();
+          document.getElementById('ncSection').style.display = 'none';
+        } else {
+          throw new Error(result.message);
+        }
+
+      } catch (error) {
+        console.error("Error submitting form:", error);
+        statusAlert.className = "alert alert-danger shadow-sm";
+        statusAlert.innerHTML = `<strong>เกิดข้อผิดพลาด!</strong> ไม่สามารถบันทึกข้อมูลได้: ${error.message}`;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `บันทึกข้อมูลลง Google Sheet & Drive`;
+        statusAlert.style.display = 'block';
+      }
     }
-</script>
+  </script>
 
 </body>
 </html>
