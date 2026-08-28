@@ -76,7 +76,7 @@
 
 <script>
     // 📌 URL ของ Google Apps Script (Web App)
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzCF8hm5kDOxEm3kpF8TCsTliy1l6cPBy1Ihh3Wv2LUbzgZ9-cEyN7pCdJIRfGGA9BA/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbwhsdHSFdf75z2nklHf-56QuqmrwlUV_jN7x-1eiiMK2HbYgyMyFWug_Pd_FX50thmy/exec";
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -322,13 +322,24 @@
                                 <input type="text" class="form-control mt-2" id="${uid}_check5Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
                             </div>
 
+                            <!-- แนวทางป้องกัน -->
+                            <div class="col-12">
+                                <label class="form-label fw-semibold text-primary">🛡️ แนวทางป้องกัน:</label>
+                                <select class="form-select" id="${uid}_prevent" onchange="toggleOtherInput('${uid}_prevent', '${uid}_preventOther')">
+                                    <option value="ติดตามเฝ้าระวัง">ติดตามเฝ้าระวัง</option>
+                                    <option value="อื่นๆ">อื่นๆ</option>
+                                    <option value="-" selected>-</option>
+                                </select>
+                                <input type="text" class="form-control mt-2" id="${uid}_preventOther" placeholder="ระบุแนวทางป้องกันอื่นๆ..." style="display:none;">
+                            </div>
+
                             <div class="col-md-6 mt-3">
                                 <label class="form-label fw-semibold">ชื่อผู้บันทึก:</label>
-                                <input type="text" class="form-control bg-light" id="${uid}_recName" value="ทนพญ.อาริยา ถนอมศักดิ์ยุทธ" readonly>
+                                <input type="text" class="form-control bg-light" id="${uid}_recName" value="อาริยา ถนอมศักดิ์ยุทธ" readonly>
                             </div>
                             <div class="col-md-6 mt-3">
                                 <label class="form-label fw-semibold">ชื่อผู้ตรวจสอบ:</label>
-                                <input type="text" class="form-control bg-light" id="${uid}_verName" value="ทนพ.ชวชล เศษฐอุดม" readonly>
+                                <input type="text" class="form-control bg-light" id="${uid}_verName" value="ชวชล เศษฐอุดม" readonly>
                             </div>
                         </div>
                     `;
@@ -389,21 +400,29 @@
                         return `${d}/${m}/${y}`;
                     };
 
+                    // ฟังก์ชันแปลงค่าหากเลือก "-" ให้ส่งค่าว่าง "" ไปบันทึก
+                    const getFormattedValue = (selectId) => {
+                        const val = document.getElementById(selectId).value;
+                        return val === "-" ? "" : val;
+                    };
+
                     return {
                         ...row,
                         invDate: formatDate(document.getElementById(`${uid}_invDate`).value),
                         programName: document.getElementById(`${uid}_programName`).value,
                         machineName: document.getElementById(`${uid}_machineName`).value,
-                        check1: document.getElementById(`${uid}_check1`).value,
+                        check1: getFormattedValue(`${uid}_check1`),
                         check1Other: document.getElementById(`${uid}_check1Other`).value,
-                        check2: document.getElementById(`${uid}_check2`).value,
+                        check2: getFormattedValue(`${uid}_check2`),
                         check2Other: document.getElementById(`${uid}_check2Other`).value,
-                        check3: document.getElementById(`${uid}_check3`).value,
+                        check3: getFormattedValue(`${uid}_check3`),
                         check3Other: document.getElementById(`${uid}_check3Other`).value,
-                        check4: document.getElementById(`${uid}_check4`).value,
+                        check4: getFormattedValue(`${uid}_check4`),
                         check4Other: document.getElementById(`${uid}_check4Other`).value,
-                        check5: document.getElementById(`${uid}_check5`).value,
+                        check5: getFormattedValue(`${uid}_check5`),
                         check5Other: document.getElementById(`${uid}_check5Other`).value,
+                        prevent: getFormattedValue(`${uid}_prevent`),
+                        preventOther: document.getElementById(`${uid}_preventOther`).value,
                         recName: document.getElementById(`${uid}_recName`).value,
                         verName: document.getElementById(`${uid}_verName`).value
                     };
