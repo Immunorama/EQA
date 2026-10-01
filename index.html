@@ -129,16 +129,23 @@
                 const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
                 const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
                 const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i) || page1Text.match(/(\d{2}\/\d{2}\/\d{4})/);
-                const progMatch = page1Text.match(/(SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+                const progMatch = page1Text.match(/(TORCH|SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+
+                const detectedProgram = progMatch ? progMatch[1].trim() : "IMMUNOASSAY";
 
                 // สกัดชื่อห้องปฏิบัติการ (Lab Name)
-                const labMatch = page1Text.match(/(Reg\s*\([A-Za-z0-9]\)\s*-[^\n]+)/i) || 
-                                 page1Text.match(/LABORATORY REF\. NO\.\s*[\d\.\/A-Za-z]+\s*\n?\s*([^\n]+)/i);
-                const detectedLabName = labMatch ? labMatch[1].trim() : "Reg (A) - Rama Immuno I";
+                let detectedLabName = "";
+                if (detectedProgram.toUpperCase().includes("TORCH") || page1Text.toUpperCase().includes("TORCH")) {
+                    detectedLabName = "Diasorin Liaison XL";
+                } else {
+                    const labMatch = page1Text.match(/(Reg\s*\([A-Za-z0-9]\)\s*-[^\n]+)/i) || 
+                                     page1Text.match(/LABORATORY REF\. NO\.\s*[\d\.\/A-Za-z]+\s*\n?\s*([^\n]+)/i);
+                    detectedLabName = labMatch ? labMatch[1].trim() : "Reg (A) - Rama Immuno I";
+                }
 
                 const metadata = {
                     orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
-                    programName: progMatch ? progMatch[1].trim() : "IMMUNOASSAY",
+                    programName: detectedProgram,
                     refNo: refMatch ? refMatch[1] : "",
                     issueDate: dateMatch ? dateMatch[1] : "",
                     cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
@@ -222,7 +229,7 @@
         }
     }
 
-    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อแก้ไขในฟอร์ม NC ให้กลับมาเปลี่ยนในตาราง Preview
+    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อแก้ไขในฟอร์ม NC ให้กลับมาตรงกับตาราง Preview
     function syncNcToLab(fileIdx, rowIdx) {
         const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
         const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
@@ -287,7 +294,7 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold text-primary">ชื่อห้องปฏิบัติการ:</label>
-                                <input type="text" class="form-control border-primary fw-semibold" id="${uid}_labName" value="${row.labName}" oninput="syncNcToLab(${fileIdx}, ${rowIdx})">
+                                <input type="text" class="form-control border-primary fw-semibold text-primary" id="${uid}_labName" value="${row.labName}" oninput="syncNcToLab(${fileIdx}, ${rowIdx})">
                             </div>
 
                             <!-- ข้อ 1 -->
@@ -411,7 +418,7 @@
             const item = batchExtractedData[fileIdx];
             uploadBtn.innerText = `กำลังอัปโหลดไฟล์ที่ ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
 
-            // ดึงค่าบันทึกของแต่ละแถว รวมชื่อห้องปฏิบัติการที่ระบุในแต่ละแถว
+            // ดึงค่าบันทึกของแต่ละแถว รวมชื่อห้องปฏิบัติการที่เลือกในแต่ละแถว
             const updatedRows = item.rows.map((row, rowIdx) => {
                 const selectedLab = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`) ? 
                                     document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`).value : 
@@ -423,7 +430,7 @@
                 let rowData = {
                     ...row,
                     labName: selectedLab,
-                    machineName: selectedLab // ส่งชื่อ Lab ไปในช่อง machineName ด้วยเพื่อรองรับ Apps Script ตัวเดิม
+                    machineName: selectedLab
                 };
 
                 if (isOutOfLimit) {
