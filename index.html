@@ -19,7 +19,7 @@
 
 <div class="container py-4">
     <div class="row justify-content-center">
-        <div class="col-lg-11">
+        <div class="col-lg-12">
             <!-- Header Card -->
             <div class="card p-4 mb-4">
                 <h3 class="card-title text-primary fw-bold mb-2">📁 ระบบสกัดข้อมูล EQA และบันทึกการตรวจสอบ NC</h3>
@@ -44,8 +44,8 @@
                     <span class="badge bg-success fs-6" id="totalRowsBadge">0 รายการ</span>
                 </div>
 
-                <div class="table-responsive mb-4" style="max-height: 350px; overflow-y: auto;">
-                    <table class="table table-bordered table-striped table-preview">
+                <div class="table-responsive mb-4" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-bordered table-striped table-hover table-preview align-middle">
                         <thead class="table-dark sticky-top">
                             <tr>
                                 <th>#</th>
@@ -53,6 +53,7 @@
                                 <th>โปรแกรม</th>
                                 <th>Cycle/Sample</th>
                                 <th>ชื่อการทดสอบ</th>
+                                <th style="min-width: 180px;">เครื่องมือ (Machine)</th>
                                 <th>ค่า SDI</th>
                                 <th>สถานะ</th>
                             </tr>
@@ -77,6 +78,20 @@
 <script>
     // 📌 URL ของ Google Apps Script (Web App)
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyf9Nv21uA7myVcMN651ILX-Fd43dL_BSlOXQBtd6QkYLH_Tfl1dsqm6tzQTWPRdOmO/exec";
+
+    // รายชื่อเครื่องมือที่มีในระบบ
+    const MACHINE_LIST = [
+        "Alinity c Leanlab",
+        "Alinity c SDMC",
+        "Alinity i Leanlab",
+        "Alinity i SDMC",
+        "C503",
+        "C513",
+        "Diasorin Liaison XL",
+        "E801 Leanlab",
+        "E801 SDMC",
+        "Liaison"
+    ];
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -119,7 +134,7 @@
                 const arrayBuffer = await file.arrayBuffer();
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 
-                // หน้า 1: สกัด Metadata
+                // หน้า 1: สกัด Metadata หลัก
                 const page1 = await pdf.getPage(1);
                 const textContent1 = await page1.getTextContent();
                 const page1Text = textContent1.items.map(item => item.str).join('\n');
@@ -130,24 +145,10 @@
                 const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i) || page1Text.match(/(\d{2}\/\d{2}\/\d{4})/);
                 const progMatch = page1Text.match(/(SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
-                // สกัดชื่อเครื่อง พร้อมกรอง Email / Contact Info ออก
-                let defaultMachine = "Alinity c Leanlab";
-                const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.\/A-Za-z]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
-                const machineMatch = page1Text.match(machineRegex);
-                if (machineMatch && machineMatch[1]) {
-                    const parsedMachine = machineMatch[1].trim();
-                    // ตรวจสอบว่าไม่เป็น Email, URL หรือข้อมูลติดต่อ
-                    const isInvalidContactText = /email|@|riqas|tel|fax|www|http/i.test(parsedMachine);
-                    if (parsedMachine && !isInvalidContactText) {
-                        defaultMachine = parsedMachine;
-                    }
-                }
-
                 const metadata = {
                     orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
                     programName: progMatch ? progMatch[1].trim() : "SEROLOGY (TORCH)",
                     refNo: refMatch ? refMatch[1] : "",
-                    machineName: defaultMachine,
                     issueDate: dateMatch ? dateMatch[1] : "",
                     cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
                     sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
@@ -163,7 +164,7 @@
 
                     if (pageText.includes("Your Result") && pageText.includes("SDI")) {
                         
-                        // 1. ดึงชื่อการทดสอบ (ใช้ วันที่ DD/MM/YYYY เป็นจุดตัดเอาเฉพาะชื่อการทดสอบ)
+                        // 1. ดึงชื่อการทดสอบ
                         let testName = "";
                         const testMatchWithDate = pageText.match(/\d{2}\/\d{2}\/\d{4}\s+([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
 
@@ -182,7 +183,7 @@
                             }
                         }
 
-                        // 2. ดึงค่า SDI (ปรับแพทเทิร์นจับคู่กับตาราง RIQAS)
+                        // 2. ดึงค่า SDI
                         let sdi = "";
                         const sdiBlockMatch = pageText.match(/Your Result\s+SDI[\s\S]*?(\d+\.\d+|\d+)\s+([-\+]?\d+\.\d+|[-\+]?\d+)/i);
                         if (sdiBlockMatch) {
@@ -192,10 +193,31 @@
                             if (fallbackSdi) sdi = fallbackSdi[1];
                         }
 
+                        // 3. ตรวจจับชื่อเครื่องเฉพาะการทดสอบนี้จากหน้า PDF
+                        let detectedMachine = "Alinity i Leanlab"; // ค่าเริ่มต้น
+                        const instMatch = pageText.match(/(Diasorin\s*Liaison\s*XL|Liaison\s*XL|Alinity\s*c\s*SDMC|Alinity\s*c\s*Leanlab|Alinity\s*i\s*SDMC|Alinity\s*i\s*Leanlab|Alinity\s*c|Alinity\s*i|C503|C513|E801\s*SDMC|E801\s*Leanlab|E801|Liaison|Laiason)/i);
+                        
+                        if (instMatch) {
+                            const rawInst = instMatch[1].toUpperCase();
+                            if (rawInst.includes("DIASORIN") || rawInst.includes("LIAISON XL")) detectedMachine = "Diasorin Liaison XL";
+                            else if (rawInst.includes("ALINITY C") && rawInst.includes("SDMC")) detectedMachine = "Alinity c SDMC";
+                            else if (rawInst.includes("ALINITY C")) detectedMachine = "Alinity c Leanlab";
+                            else if (rawInst.includes("ALINITY I") && rawInst.includes("SDMC")) detectedMachine = "Alinity i SDMC";
+                            else if (rawInst.includes("ALINITY I")) detectedMachine = "Alinity i Leanlab";
+                            else if (rawInst.includes("C503")) detectedMachine = "C503";
+                            else if (rawInst.includes("C513")) detectedMachine = "C513";
+                            else if (rawInst.includes("E801") && rawInst.includes("SDMC")) detectedMachine = "E801 SDMC";
+                            else if (rawInst.includes("E801")) detectedMachine = "E801 Leanlab";
+                            else if (rawInst.includes("LIAISON") || rawInst.includes("LAIASON")) detectedMachine = "Diasorin Liaison XL";
+                        } else if (metadata.programName.includes("TORCH") || metadata.programName.includes("SEROLOGY")) {
+                            detectedMachine = "Diasorin Liaison XL";
+                        }
+
                         if (testName && sdi) {
                             fileRows.push({
                                 ...metadata,
                                 testName: testName,
+                                machineName: detectedMachine,
                                 sdi: sdi
                             });
                         }
@@ -218,7 +240,32 @@
         showAlert("d-none", "");
     });
 
-    // แสดง Preview และฟอร์มบันทึกการตรวจสอบ NC กรณี |SDI| > 2
+    // Helper สร้าง HTML Option สำหรับ Dropdown ชื่อเครื่อง
+    function renderMachineOptions(selectedMachine) {
+        return MACHINE_LIST.map(m => 
+            `<option value="${m}" ${m === selectedMachine ? 'selected' : ''}>${m}</option>`
+        ).join('');
+    }
+
+    // ฟังก์ชัน Sync ชื่อเครื่องเมื่อผู้ใช้เปลี่ยนในตาราง Preview ให้ตรงกับฟอร์ม NC
+    function syncMachineToNc(fileIdx, rowIdx) {
+        const tableSelect = document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`);
+        const ncSelect = document.getElementById(`nc_${fileIdx}_${rowIdx}_machineName`);
+        if (tableSelect && ncSelect) {
+            ncSelect.value = tableSelect.value;
+        }
+    }
+
+    // ฟังก์ชัน Sync ชื่อเครื่องเมื่อเปลี่ยนในฟอร์ม NC ให้กลับมาเปลี่ยนในตาราง Preview
+    function syncNcToMachine(fileIdx, rowIdx) {
+        const ncSelect = document.getElementById(`nc_${fileIdx}_${rowIdx}_machineName`);
+        const tableSelect = document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`);
+        if (ncSelect && tableSelect) {
+            tableSelect.value = ncSelect.value;
+        }
+    }
+
+    // แสดง Preview และฟอร์มบันทึกการตรวจสอบ NC
     function displayPreview(batchData) {
         const tbody = document.getElementById('testRowsBody');
         const ncContainer = document.getElementById('ncFormContainer');
@@ -240,10 +287,15 @@
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td>${globalIndex++}</td>
-                    <td class="text-truncate" style="max-width: 140px;" title="${item.fileName}">${item.fileName}</td>
+                    <td class="text-truncate" style="max-width: 130px;" title="${item.fileName}">${item.fileName}</td>
                     <td>${row.programName}</td>
                     <td>C${row.cycle}/S${row.sample}</td>
                     <td class="fw-bold">${row.testName}</td>
+                    <td>
+                        <select class="form-select form-select-sm fw-semibold text-primary" id="tbl_machine_${fileIdx}_${rowIdx}" onchange="syncMachineToNc(${fileIdx}, ${rowIdx})">
+                            ${renderMachineOptions(row.machineName)}
+                        </select>
+                    </td>
                     <td class="${isOutOfLimit ? 'text-danger fw-bold' : ''}">${row.sdi}</td>
                     <td>${isOutOfLimit ? '<span class="badge-sdi-out">⚠️ พบ |SDI| > 2 (ต้องกรอก NC)</span>' : '<span class="text-muted">ปกติ</span>'}</td>
                 `;
@@ -270,17 +322,9 @@
                                 <input type="text" class="form-control bg-light" id="${uid}_programName" value="${row.programName}" readonly>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label fw-semibold">ชื่อเครื่องมือ:</label>
-                                <select class="form-select" id="${uid}_machineName">
-                                    <option value="Alinity c Leanlab">Alinity c Leanlab</option>
-                                    <option value="Alinity c SDMC">Alinity c SDMC</option>
-                                    <option value="Alinity i Leanlab">Alinity i Leanlab</option>
-                                    <option value="Alinity i SDMC">Alinity i SDMC</option>
-                                    <option value="C503">C503</option>
-                                    <option value="C513">C513</option>
-                                    <option value="E801 Leanlab">E801 Leanlab</option>
-                                    <option value="E801 SDMC">E801 SDMC</option>
-                                    <option value="Laiason">Laiason</option>
+                                <label class="form-label fw-semibold text-primary">ชื่อเครื่องมือ:</label>
+                                <select class="form-select border-primary" id="${uid}_machineName" onchange="syncNcToMachine(${fileIdx}, ${rowIdx})">
+                                    ${renderMachineOptions(row.machineName)}
                                 </select>
                             </div>
 
@@ -405,10 +449,19 @@
             const item = batchExtractedData[fileIdx];
             uploadBtn.innerText = `กำลังอัปโหลดไฟล์ที่ ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
 
-            // ดึงค่าบันทึก NC ของแต่ละแถว หากมี
+            // ดึงค่าบันทึกของแต่ละแถว รวมชื่อเครื่องมือที่เลือกในแต่ละแถว
             const updatedRows = item.rows.map((row, rowIdx) => {
+                const selectedMachine = document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`) ? 
+                                        document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`).value : 
+                                        row.machineName;
+
                 const sdiVal = parseFloat(row.sdi);
                 const isOutOfLimit = !isNaN(sdiVal) && Math.abs(sdiVal) > 2;
+
+                let rowData = {
+                    ...row,
+                    machineName: selectedMachine
+                };
 
                 if (isOutOfLimit) {
                     const uid = `nc_${fileIdx}_${rowIdx}`;
@@ -420,15 +473,17 @@
                     };
 
                     const getFormattedValue = (selectId) => {
-                        const val = document.getElementById(selectId).value;
+                        const elem = document.getElementById(selectId);
+                        if (!elem) return "";
+                        const val = elem.value;
                         return val === "-" ? "" : val;
                     };
 
-                    return {
-                        ...row,
+                    rowData = {
+                        ...rowData,
                         invDate: formatDate(document.getElementById(`${uid}_invDate`).value),
                         programName: document.getElementById(`${uid}_programName`).value,
-                        machineName: document.getElementById(`${uid}_machineName`).value,
+                        machineName: selectedMachine, // ใช้ชื่อเครื่องเฉพาะของรายการนี้
                         check1: getFormattedValue(`${uid}_check1`),
                         check1Other: document.getElementById(`${uid}_check1Other`).value,
                         check2: getFormattedValue(`${uid}_check2`),
@@ -445,7 +500,7 @@
                         verName: document.getElementById(`${uid}_verName`).value
                     };
                 }
-                return row;
+                return rowData;
             });
 
             try {
