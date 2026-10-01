@@ -66,7 +66,7 @@
                 <div id="ncFormContainer"></div>
 
                 <button id="uploadBtn" class="btn btn-success w-100 fw-bold py-3 mt-3 shadow">
-                    2. บันทึกข้อมูลลง Google Sheet & Drive (และออก PDF NC)
+                    2. บันทึกข้อมูลลง Google Sheet & Drive
                 </button>
             </div>
 
@@ -76,8 +76,8 @@
 </div>
 
 <script>
-    // 📌 URL ของ Google Apps Script (Web App)
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbzhN0n-nKRxUj0V8bQ-fWF9Veg4ehu7XDBglH4AXoYw4GxR1UFSK4yYsORelUPXiRJe/exec";
+    // 📌 URL ของ Google Apps Script (Web App URL ที่ลงท้ายด้วย /exec)
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxOcZPOa61HJW_gdLhaoACAXiZSZEykzmEqpf99PWnPXklYNVrg3XCe7Ceha0L9_a07/exec";
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -220,7 +220,7 @@
         showAlert("d-none", "");
     });
 
-    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อแก้ไขในตาราง Preview ให้ตรงกับฟอร์ม NC
+    // Sync ชื่อห้องปฏิบัติการระหว่าง ตาราง Preview กับ ฟอร์ม NC
     function syncLabToNc(fileIdx, rowIdx) {
         const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
         const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
@@ -229,7 +229,6 @@
         }
     }
 
-    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อแก้ไขในฟอร์ม NC ให้กลับมาตรงกับตาราง Preview
     function syncNcToLab(fileIdx, rowIdx) {
         const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
         const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
@@ -384,7 +383,6 @@
         document.getElementById('previewCard').classList.remove('d-none');
     }
 
-    // ซ่อน/แสดง ช่อง Free-text เมื่อเลือก "อื่นๆ"
     function toggleOtherInput(selectId, inputId) {
         const selectElem = document.getElementById(selectId);
         const inputElem = document.getElementById(inputId);
@@ -403,7 +401,7 @@
         reader.onerror = (error) => reject(error);
     });
 
-    // ส่งข้อมูลไปยัง Google Apps Script
+    // ส่งข้อมูลลง Google Apps Script (แนบทั้งไฟล์ PDF Base64 และข้อมูลแถว)
     uploadBtn.addEventListener('click', async () => {
         if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
             alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
@@ -416,9 +414,8 @@
 
         for (let fileIdx = 0; fileIdx < totalFiles; fileIdx++) {
             const item = batchExtractedData[fileIdx];
-            uploadBtn.innerText = `กำลังอัปโหลดไฟล์ที่ ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
+            uploadBtn.innerText = `กำลังอัปโหลดไฟล์และบันทึกข้อมูล ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
 
-            // ดึงค่าบันทึกของแต่ละแถว รวมชื่อห้องปฏิบัติการที่เลือกในแต่ละแถว
             const updatedRows = item.rows.map((row, rowIdx) => {
                 const selectedLab = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`) ? 
                                     document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`).value : 
@@ -451,30 +448,31 @@
 
                     rowData = {
                         ...rowData,
-                        invDate: formatDate(document.getElementById(`${uid}_invDate`).value),
-                        programName: document.getElementById(`${uid}_programName`).value,
+                        invDate: formatDate(document.getElementById(`${uid}_invDate`) ? document.getElementById(`${uid}_invDate`).value : ""),
+                        programName: document.getElementById(`${uid}_programName`) ? document.getElementById(`${uid}_programName`).value : row.programName,
                         labName: selectedLab,
                         machineName: selectedLab,
                         check1: getFormattedValue(`${uid}_check1`),
-                        check1Other: document.getElementById(`${uid}_check1Other`).value,
+                        check1Other: document.getElementById(`${uid}_check1Other`) ? document.getElementById(`${uid}_check1Other`).value : "",
                         check2: getFormattedValue(`${uid}_check2`),
-                        check2Other: document.getElementById(`${uid}_check2Other`).value,
+                        check2Other: document.getElementById(`${uid}_check2Other`) ? document.getElementById(`${uid}_check2Other`).value : "",
                         check3: getFormattedValue(`${uid}_check3`),
-                        check3Other: document.getElementById(`${uid}_check3Other`).value,
+                        check3Other: document.getElementById(`${uid}_check3Other`) ? document.getElementById(`${uid}_check3Other`).value : "",
                         check4: getFormattedValue(`${uid}_check4`),
-                        check4Other: document.getElementById(`${uid}_check4Other`).value,
+                        check4Other: document.getElementById(`${uid}_check4Other`) ? document.getElementById(`${uid}_check4Other`).value : "",
                         check5: getFormattedValue(`${uid}_check5`),
-                        check5Other: document.getElementById(`${uid}_check5Other`).value,
+                        check5Other: document.getElementById(`${uid}_check5Other`) ? document.getElementById(`${uid}_check5Other`).value : "",
                         prevent: getFormattedValue(`${uid}_prevent`),
-                        preventOther: document.getElementById(`${uid}_preventOther`).value,
-                        recName: document.getElementById(`${uid}_recName`).value,
-                        verName: document.getElementById(`${uid}_verName`).value
+                        preventOther: document.getElementById(`${uid}_preventOther`) ? document.getElementById(`${uid}_preventOther`).value : "",
+                        recName: document.getElementById(`${uid}_recName`) ? document.getElementById(`${uid}_recName`).value : "",
+                        verName: document.getElementById(`${uid}_verName`) ? document.getElementById(`${uid}_verName`).value : ""
                     };
                 }
                 return rowData;
             });
 
             try {
+                // แปลงไฟล์ PDF เป็น Base64 แนบไปด้วย
                 const base64File = await fileToBase64(item.file);
 
                 const payload = {
@@ -492,6 +490,8 @@
                 const result = await response.json();
                 if (result.status === "success") {
                     successCount++;
+                } else {
+                    console.error("Apps Script Error:", result.message);
                 }
             } catch (error) {
                 console.error(`เกิดข้อผิดพลาดในการส่งไฟล์ ${item.fileName}:`, error);
@@ -499,12 +499,12 @@
         }
 
         uploadBtn.disabled = false;
-        uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive (และออก PDF NC)";
+        uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
 
         if (successCount === totalFiles) {
-            showAlert("alert-success", `🎉 บันทึกข้อมูลและสร้างเอกสาร NC เรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
+            showAlert("alert-success", `🎉 บันทึกไฟล์ PDF และข้อมูลลง Sheet เรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
         } else {
-            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
+            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log ใน Console เพิ่มเติม)`);
         }
     });
 
