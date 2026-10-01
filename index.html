@@ -127,8 +127,8 @@
                 const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
                 const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
                 const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-                const progMatch = page1Text.match(/(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS|SEROLOGY\s*\(TORCH\)|SEROLOGY)/i);
-
+                //const progMatch = page1Text.match(/(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS|SEROLOGY\s*\(TORCH\)|SEROLOGY)/i);
+                const progMatch = page1Text.match(/(SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
                 let defaultMachine = "Alinity c Leanlab";
                 const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
                 const machineMatch = page1Text.match(machineRegex);
@@ -138,49 +138,59 @@
                 }
 
                 const metadata = {
-                    orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
-                    programName: progMatch ? progMatch[1].trim() : "SEROLOGY (TORCH)",
-                    refNo: refMatch ? refMatch[1] : "",
-                    machineName: defaultMachine,
-                    issueDate: dateMatch ? dateMatch[1] : "",
-                    cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
-                    sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
-                };
+                        orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
+                        programName: progMatch ? progMatch[1].trim() : "SEROLOGY (TORCH)",
+                        refNo: refMatch ? refMatch[1] : "",
+                        machineName: defaultMachine,
+                        issueDate: dateMatch ? dateMatch[1] : "",
+                        cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
+                        sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
+                    };
 
                 // หน้า 2 เป็นต้นไป: สกัดผลการทดสอบ
                 const fileRows = [];
-                for (let i = 2; i <= pdf.numPages; i++) {
-                    await yieldToUI();
-                    const page = await pdf.getPage(i);
-                    const textContent = await page.getTextContent();
-                    const pageText = textContent.items.map(item => item.str).join(' ');
+for (let i = 1; i <= pdf.numPages; i++) {
+    await yieldToUI();
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map(item => item.str).join(' ');
 
-                    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-                        let testName = "";
-                        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)&]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%|AU\/ml|INDEX|mIU\/ml)/i);
-                        if (testMatch) {
-                            testName = testMatch[1]
-                                .replace(/.*?Standard Deviation\s*/i, '')
-                                .replace(/.*?(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS|SEROLOGY\s*\(TORCH\)|SEROLOGY)\s*/i, '')
-                                .replace(/^[\d\s\+\-\.]+/g, '')
-                                .trim();
-                        }
+    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
+        
+        // 1. ดึงชื่อการทดสอบ (เพิ่มหน่วย AU/ml, INDEX, mIU/ml)
+        let testName = "";
+        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+        if (testMatch) {
+            testName = testMatch[1]
+                .replace(/.*?SEROLOGY\s*\(TORCH\)\s*/i, '')
+                .replace(/.*?LABORATORY REF\. NO\..*?CYCLE\s*\d+\s*SAMPLE\s*[\dI]+\s*[\d\/]+/i, '')
+                .replace(/.*?Standard Deviation\s*/i, '')
+                .replace(/.*?(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
+                .replace(/^[\d\s\+\-\.]+/g, '')
+                .trim();
+        }
 
-                        let sdi = "";
-                        const sdiMatch = pageText.match(/SDI\s*([-\d\.]+)/i);
-                        if (sdiMatch) {
-                            sdi = sdiMatch[1];
-                        }
-
-                        if (testName && sdi) {
-                            fileRows.push({
-                                ...metadata,
-                                testName: testName,
-                                sdi: sdi
-                            });
-                        }
+        // 2. ดึงค่า SDI (ปรับแพทเทิร์นอ่านค่าตัวเลขให้ตรงกับโครงสร้างตาราง RIQAS)
+        let sdi = "";
+        // มองหาบล็อก "Your Result SDI RMSDI Mean for Comparison" แล้วจับคู่ตัวเลขชุดที่สอง (ซึ่งคือค่า SDI)
+        const sdiBlockMatch = pageText.match(/Your Result\s+SDI[\s\S]*?(\d+\.\d+|\d+)\s+([-\+]?\d+\.\d+|[-\+]?\d+)/i);
+                    if (sdiBlockMatch) {
+                        sdi = sdiBlockMatch[2]; // จับค่า SDI
+                    } else {
+                        // สำรองกรณีรูปแบบไฟล์ต่างออกไป
+                        const fallbackSdi = pageText.match(/SDI\s*([-\+]?\d+\.\d+)/i);
+                        if (fallbackSdi) sdi = fallbackSdi[1];
+                    }
+            
+                    if (testName && sdi) {
+                        fileRows.push({
+                            ...metadata,
+                            testName: testName,
+                            sdi: sdi
+                        });
                     }
                 }
+            }
 
                 batchExtractedData.push({
                     file: file,
