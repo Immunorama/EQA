@@ -125,13 +125,15 @@
                 const page1Text = textContent1.items.map(item => item.str).join('\n');
 
                 const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
-                const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
+                const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
                 const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
                 const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-                const progMatch = page1Text.match(/(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+                
+                // เพิ่มการตรวจสอบโปรแกรม SEROLOGY (TORCH) และโปรแกรมอื่นๆ
+                const progMatch = page1Text.match(/(SEROLOGY\s*\([^)]*\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
                 let defaultMachine = "Alinity c Leanlab";
-                const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
+                const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.\/A-Za-z]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised|SEROLOGY|IMMUNO)/i;
                 const machineMatch = page1Text.match(machineRegex);
                 if (machineMatch && machineMatch[1]) {
                     const parsedMachine = machineMatch[1].trim();
@@ -156,13 +158,14 @@
                     const textContent = await page.getTextContent();
                     const pageText = textContent.items.map(item => item.str).join(' ');
 
-                    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
+                    if (pageText.includes("Your Result") && (pageText.includes("SDI") || pageText.includes("RMSDI"))) {
                         let testName = "";
-                        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+                        // เพิ่มหน่วย AU/ml, INDEX, mIU/ml, S/CO และรองรับอักขระ & ในชื่อการทดสอบ
+                        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\)&]+),\s*(U\/ml|ng\/ml|mg\/L|IU\/ml|mIU\/ml|AU\/ml|INDEX|S\/CO|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
                         if (testMatch) {
                             testName = testMatch[1]
                                 .replace(/.*?Standard Deviation\s*/i, '')
-                                .replace(/.*?(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
+                                .replace(/.*?(SEROLOGY\s*\([^)]*\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
                                 .replace(/^[\d\s\+\-\.]+/g, '')
                                 .trim();
                         }
@@ -173,7 +176,7 @@
                             sdi = sdiMatch[1];
                         }
 
-                        if (testName && sdi) {
+                        if (testName && sdi !== "") {
                             fileRows.push({
                                 ...metadata,
                                 testName: testName,
@@ -261,6 +264,7 @@
                                     <option value="C513">C513</option>
                                     <option value="E801 Leanlab">E801 Leanlab</option>
                                     <option value="E801 SDMC">E801 SDMC</option>
+                                    <option value="Diasorin Liaison XL">Diasorin Liaison XL</option>
                                     <option value="Laiason">Laiason</option>
                                 </select>
                             </div>
@@ -344,6 +348,17 @@
                         </div>
                     `;
                     ncContainer.appendChild(ncCard);
+
+                    // เลือกเครื่องมือให้ตรงกับที่สกัดได้อัตโนมัติ
+                    const machineSelect = document.getElementById(`${uid}_machineName`);
+                    if (row.machineName) {
+                        for (let opt of machineSelect.options) {
+                            if (opt.value.toLowerCase().includes(row.machineName.toLowerCase()) || row.machineName.toLowerCase().includes(opt.value.toLowerCase())) {
+                                machineSelect.value = opt.value;
+                                break;
+                            }
+                        }
+                    }
                 }
             });
         });
