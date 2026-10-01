@@ -130,12 +130,17 @@
                 const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i) || page1Text.match(/(\d{2}\/\d{2}\/\d{4})/);
                 const progMatch = page1Text.match(/(SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
+                // สกัดชื่อเครื่อง พร้อมกรอง Email / Contact Info ออก
                 let defaultMachine = "Alinity c Leanlab";
                 const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.\/A-Za-z]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
                 const machineMatch = page1Text.match(machineRegex);
                 if (machineMatch && machineMatch[1]) {
                     const parsedMachine = machineMatch[1].trim();
-                    if (parsedMachine) defaultMachine = parsedMachine;
+                    // ตรวจสอบว่าไม่เป็น Email, URL หรือข้อมูลติดต่อ
+                    const isInvalidContactText = /email|@|riqas|tel|fax|www|http/i.test(parsedMachine);
+                    if (parsedMachine && !isInvalidContactText) {
+                        defaultMachine = parsedMachine;
+                    }
                 }
 
                 const metadata = {
@@ -473,7 +478,7 @@
         if (successCount === totalFiles) {
             showAlert("alert-success", `🎉 บันทึกข้อมูลและสร้างเอกสาร NC เรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
         } else {
-            showAlert("alert-warning", `⚠️️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
+            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
         }
     });
 
