@@ -75,6 +75,7 @@
 </div>
 
 <script>
+    // 📌 URL ของ Google Apps Script (Web App)
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyf9Nv21uA7myVcMN651ILX-Fd43dL_BSlOXQBtd6QkYLH_Tfl1dsqm6tzQTWPRdOmO/exec";
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -124,13 +125,13 @@
                 const page1Text = textContent1.items.map(item => item.str).join('\n');
 
                 const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
-                const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.]+)/i);
+                const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
                 const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
-                const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i);
-                //const progMatch = page1Text.match(/(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS|SEROLOGY\s*\(TORCH\)|SEROLOGY)/i);
+                const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i) || page1Text.match(/(\d{2}\/\d{2}\/\d{4})/);
                 const progMatch = page1Text.match(/(SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+
                 let defaultMachine = "Alinity c Leanlab";
-                const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
+                const machineRegex = /LABORATORY REF\. NO\.\s*[\d\.\/A-Za-z]+\s*[\r\n]+\s*(.*?)(?=\r|\n|Authorised)/i;
                 const machineMatch = page1Text.match(machineRegex);
                 if (machineMatch && machineMatch[1]) {
                     const parsedMachine = machineMatch[1].trim();
@@ -138,59 +139,63 @@
                 }
 
                 const metadata = {
-                        orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
-                        programName: progMatch ? progMatch[1].trim() : "SEROLOGY (TORCH)",
-                        refNo: refMatch ? refMatch[1] : "",
-                        machineName: defaultMachine,
-                        issueDate: dateMatch ? dateMatch[1] : "",
-                        cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
-                        sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
-                    };
+                    orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
+                    programName: progMatch ? progMatch[1].trim() : "SEROLOGY (TORCH)",
+                    refNo: refMatch ? refMatch[1] : "",
+                    machineName: defaultMachine,
+                    issueDate: dateMatch ? dateMatch[1] : "",
+                    cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
+                    sample: cycleSampleMatch ? cycleSampleMatch[2] : ""
+                };
 
-                // หน้า 2 เป็นต้นไป: สกัดผลการทดสอบ
+                // สกัดผลการทดสอบทุกหน้า (เริ่มตั้งแต่หน้า 1)
                 const fileRows = [];
-for (let i = 1; i <= pdf.numPages; i++) {
-    await yieldToUI();
-    const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items.map(item => item.str).join(' ');
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    await yieldToUI();
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
 
-    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-        
-        // 1. ดึงชื่อการทดสอบ (เพิ่มหน่วย AU/ml, INDEX, mIU/ml)
-        let testName = "";
-        const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
-        if (testMatch) {
-            testName = testMatch[1]
-                .replace(/.*?SEROLOGY\s*\(TORCH\)\s*/i, '')
-                .replace(/.*?LABORATORY REF\. NO\..*?CYCLE\s*\d+\s*SAMPLE\s*[\dI]+\s*[\d\/]+/i, '')
-                .replace(/.*?Standard Deviation\s*/i, '')
-                .replace(/.*?(IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)\s*/i, '')
-                .replace(/^[\d\s\+\-\.]+/g, '')
-                .trim();
-        }
+                    if (pageText.includes("Your Result") && pageText.includes("SDI")) {
+                        
+                        // 1. ดึงชื่อการทดสอบ (ใช้ วันที่ DD/MM/YYYY เป็นจุดตัดเอาเฉพาะชื่อการทดสอบ)
+                        let testName = "";
+                        const testMatchWithDate = pageText.match(/\d{2}\/\d{2}\/\d{4}\s+([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
 
-        // 2. ดึงค่า SDI (ปรับแพทเทิร์นอ่านค่าตัวเลขให้ตรงกับโครงสร้างตาราง RIQAS)
-        let sdi = "";
-        // มองหาบล็อก "Your Result SDI RMSDI Mean for Comparison" แล้วจับคู่ตัวเลขชุดที่สอง (ซึ่งคือค่า SDI)
-        const sdiBlockMatch = pageText.match(/Your Result\s+SDI[\s\S]*?(\d+\.\d+|\d+)\s+([-\+]?\d+\.\d+|[-\+]?\d+)/i);
-                    if (sdiBlockMatch) {
-                        sdi = sdiBlockMatch[2]; // จับค่า SDI
-                    } else {
-                        // สำรองกรณีรูปแบบไฟล์ต่างออกไป
-                        const fallbackSdi = pageText.match(/SDI\s*([-\+]?\d+\.\d+)/i);
-                        if (fallbackSdi) sdi = fallbackSdi[1];
-                    }
-            
-                    if (testName && sdi) {
-                        fileRows.push({
-                            ...metadata,
-                            testName: testName,
-                            sdi: sdi
-                        });
+                        if (testMatchWithDate) {
+                            testName = testMatchWithDate[1].trim();
+                        } else {
+                            const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+                            if (testMatch) {
+                                testName = testMatch[1]
+                                    .replace(/^.*?\d{2}\/\d{2}\/\d{4}\s*/i, '')
+                                    .replace(/^.*?CYCLE\s*\d+\s*SAMPLE\s*[\dI]+\s*/i, '')
+                                    .replace(/^.*?LABORATORY REF\. NO\..*?\s*/i, '')
+                                    .replace(/^.*\/[A-Za-z]\s*/i, '')
+                                    .replace(/^[\d\s\+\-\.\/]+/g, '')
+                                    .trim();
+                            }
+                        }
+
+                        // 2. ดึงค่า SDI (ปรับแพทเทิร์นจับคู่กับตาราง RIQAS)
+                        let sdi = "";
+                        const sdiBlockMatch = pageText.match(/Your Result\s+SDI[\s\S]*?(\d+\.\d+|\d+)\s+([-\+]?\d+\.\d+|[-\+]?\d+)/i);
+                        if (sdiBlockMatch) {
+                            sdi = sdiBlockMatch[2];
+                        } else {
+                            const fallbackSdi = pageText.match(/SDI\s*([-\+]?\d+\.\d+)/i);
+                            if (fallbackSdi) sdi = fallbackSdi[1];
+                        }
+
+                        if (testName && sdi) {
+                            fileRows.push({
+                                ...metadata,
+                                testName: testName,
+                                sdi: sdi
+                            });
+                        }
                     }
                 }
-            }
 
                 batchExtractedData.push({
                     file: file,
@@ -208,6 +213,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
         showAlert("d-none", "");
     });
 
+    // แสดง Preview และฟอร์มบันทึกการตรวจสอบ NC กรณี |SDI| > 2
     function displayPreview(batchData) {
         const tbody = document.getElementById('testRowsBody');
         const ncContainer = document.getElementById('ncFormContainer');
@@ -238,6 +244,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
                 `;
                 tbody.appendChild(tr);
 
+                // หากพบค่า SDI ผิดปกติ ให้สร้างฟอร์ม NC สำหรับรายการนี้
                 if (isOutOfLimit) {
                     ncCount++;
                     const uid = `nc_${fileIdx}_${rowIdx}`;
@@ -272,6 +279,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
                                 </select>
                             </div>
 
+                            <!-- ข้อ 1 -->
                             <div class="col-12">
                                 <label class="form-label fw-semibold">1. ทวนสอบการรายงานผล:</label>
                                 <select class="form-select" id="${uid}_check1" onchange="toggleOtherInput('${uid}_check1', '${uid}_check1Other')">
@@ -283,6 +291,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
                                 <input type="text" class="form-control mt-2" id="${uid}_check1Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
                             </div>
 
+                            <!-- ข้อ 2 -->
                             <div class="col-12">
                                 <label class="form-label fw-semibold">2. ตรวจสอบ Maintenance:</label>
                                 <select class="form-select" id="${uid}_check2" onchange="toggleOtherInput('${uid}_check2', '${uid}_check2Other')">
@@ -294,6 +303,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
                                 <input type="text" class="form-control mt-2" id="${uid}_check2Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
                             </div>
 
+                            <!-- ข้อ 3 -->
                             <div class="col-12">
                                 <label class="form-label fw-semibold">3. ทวนสอบค่า IQC:</label>
                                 <select class="form-select" id="${uid}_check3" onchange="toggleOtherInput('${uid}_check3', '${uid}_check3Other')">
@@ -306,6 +316,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
                                 <input type="text" class="form-control mt-2" id="${uid}_check3Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
                             </div>
 
+                            <!-- ข้อ 4 -->
                             <div class="col-12">
                                 <label class="form-label fw-semibold">4. อื่นๆ:</label>
                                 <select class="form-select" id="${uid}_check4" onchange="toggleOtherInput('${uid}_check4', '${uid}_check4Other')">
@@ -315,6 +326,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
                                 <input type="text" class="form-control mt-2" id="${uid}_check4Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
                             </div>
 
+                            <!-- ข้อ 5 -->
                             <div class="col-12">
                                 <label class="form-label fw-semibold">5. อื่นๆ:</label>
                                 <select class="form-select" id="${uid}_check5" onchange="toggleOtherInput('${uid}_check5', '${uid}_check5Other')">
@@ -324,6 +336,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
                                 <input type="text" class="form-control mt-2" id="${uid}_check5Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
                             </div>
 
+                            <!-- แนวทางป้องกัน -->
                             <div class="col-12">
                                 <label class="form-label fw-semibold text-primary">🛡️ แนวทางป้องกัน:</label>
                                 <select class="form-select" id="${uid}_prevent" onchange="toggleOtherInput('${uid}_prevent', '${uid}_preventOther')">
@@ -353,6 +366,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
         document.getElementById('previewCard').classList.remove('d-none');
     }
 
+    // ซ่อน/แสดง ช่อง Free-text เมื่อเลือก "อื่นๆ"
     function toggleOtherInput(selectId, inputId) {
         const selectElem = document.getElementById(selectId);
         const inputElem = document.getElementById(inputId);
@@ -371,6 +385,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
         reader.onerror = (error) => reject(error);
     });
 
+    // ส่งข้อมูลไปยัง Google Apps Script
     uploadBtn.addEventListener('click', async () => {
         if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
             alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
@@ -385,6 +400,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
             const item = batchExtractedData[fileIdx];
             uploadBtn.innerText = `กำลังอัปโหลดไฟล์ที่ ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
 
+            // ดึงค่าบันทึก NC ของแต่ละแถว หากมี
             const updatedRows = item.rows.map((row, rowIdx) => {
                 const sdiVal = parseFloat(row.sdi);
                 const isOutOfLimit = !isNaN(sdiVal) && Math.abs(sdiVal) > 2;
@@ -457,7 +473,7 @@ for (let i = 1; i <= pdf.numPages; i++) {
         if (successCount === totalFiles) {
             showAlert("alert-success", `🎉 บันทึกข้อมูลและสร้างเอกสาร NC เรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
         } else {
-            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
+            showAlert("alert-warning", `⚠️️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
         }
     });
 
