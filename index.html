@@ -53,7 +53,7 @@
                                 <th>โปรแกรม</th>
                                 <th>Cycle/Sample</th>
                                 <th>ชื่อการทดสอบ</th>
-                                <th style="min-width: 200px;">ชื่อห้องปฏิบัติการ (Lab)</th>
+                                <th style="min-width: 220px;">ชื่อห้องปฏิบัติการ (Lab)</th>
                                 <th>ค่า SDI</th>
                                 <th>สถานะ</th>
                             </tr>
@@ -78,22 +78,6 @@
 <script>
     // 📌 URL ของ Google Apps Script (Web App)
     const GAS_URL = "https://script.google.com/macros/s/AKfycbyf9Nv21uA7myVcMN651ILX-Fd43dL_BSlOXQBtd6QkYLH_Tfl1dsqm6tzQTWPRdOmO/exec";
-
-    // รายชื่อห้องปฏิบัติการที่มีในระบบ
-    const LAB_LIST = [
-        "Reg (A) - Rama Immuno I",
-        "Reg (A) - Rama Immuno II",
-        "Alinity c Leanlab",
-        "Alinity c SDMC",
-        "Alinity i Leanlab",
-        "Alinity i SDMC",
-        "C503",
-        "C513",
-        "Diasorin Liaison XL",
-        "E801 Leanlab",
-        "E801 SDMC",
-        "Liaison"
-    ];
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -206,7 +190,7 @@
                                 ...metadata,
                                 testName: testName,
                                 labName: metadata.labName,
-                                machineName: metadata.labName, // เพื่อความสมบูรณ์รองรับโครงสร้างเดิม
+                                machineName: metadata.labName,
                                 sdi: sdi
                             });
                         }
@@ -229,32 +213,21 @@
         showAlert("d-none", "");
     });
 
-    // Helper สร้าง HTML Option สำหรับ Dropdown ชื่อห้องปฏิบัติการ (Lab Name)
-    function renderLabOptions(selectedLab) {
-        let list = [...LAB_LIST];
-        if (selectedLab && !list.includes(selectedLab)) {
-            list.unshift(selectedLab);
-        }
-        return list.map(l => 
-            `<option value="${l}" ${l === selectedLab ? 'selected' : ''}>${l}</option>`
-        ).join('');
-    }
-
-    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อผู้ใช้เปลี่ยนในตาราง Preview ให้ตรงกับฟอร์ม NC
+    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อแก้ไขในตาราง Preview ให้ตรงกับฟอร์ม NC
     function syncLabToNc(fileIdx, rowIdx) {
-        const tableSelect = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
-        const ncSelect = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
-        if (tableSelect && ncSelect) {
-            ncSelect.value = tableSelect.value;
+        const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
+        const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
+        if (tableInput && ncInput) {
+            ncInput.value = tableInput.value;
         }
     }
 
-    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อเปลี่ยนในฟอร์ม NC ให้กลับมาเปลี่ยนในตาราง Preview
+    // ฟังก์ชัน Sync ชื่อห้องปฏิบัติการเมื่อแก้ไขในฟอร์ม NC ให้กลับมาเปลี่ยนในตาราง Preview
     function syncNcToLab(fileIdx, rowIdx) {
-        const ncSelect = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
-        const tableSelect = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
-        if (ncSelect && tableSelect) {
-            tableSelect.value = ncSelect.value;
+        const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
+        const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
+        if (ncInput && tableInput) {
+            tableInput.value = ncInput.value;
         }
     }
 
@@ -285,9 +258,7 @@
                     <td>C${row.cycle}/S${row.sample}</td>
                     <td class="fw-bold">${row.testName}</td>
                     <td>
-                        <select class="form-select form-select-sm fw-semibold text-primary" id="tbl_lab_${fileIdx}_${rowIdx}" onchange="syncLabToNc(${fileIdx}, ${rowIdx})">
-                            ${renderLabOptions(row.labName)}
-                        </select>
+                        <input type="text" class="form-control form-control-sm fw-semibold text-primary" id="tbl_lab_${fileIdx}_${rowIdx}" value="${row.labName}" oninput="syncLabToNc(${fileIdx}, ${rowIdx})">
                     </td>
                     <td class="${isOutOfLimit ? 'text-danger fw-bold' : ''}">${row.sdi}</td>
                     <td>${isOutOfLimit ? '<span class="badge-sdi-out">⚠️ พบ |SDI| > 2 (ต้องกรอก NC)</span>' : '<span class="text-muted">ปกติ</span>'}</td>
@@ -316,9 +287,7 @@
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label fw-semibold text-primary">ชื่อห้องปฏิบัติการ:</label>
-                                <select class="form-select border-primary" id="${uid}_labName" onchange="syncNcToLab(${fileIdx}, ${rowIdx})">
-                                    ${renderLabOptions(row.labName)}
-                                </select>
+                                <input type="text" class="form-control border-primary fw-semibold" id="${uid}_labName" value="${row.labName}" oninput="syncNcToLab(${fileIdx}, ${rowIdx})">
                             </div>
 
                             <!-- ข้อ 1 -->
@@ -442,7 +411,7 @@
             const item = batchExtractedData[fileIdx];
             uploadBtn.innerText = `กำลังอัปโหลดไฟล์ที่ ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
 
-            // ดึงค่าบันทึกของแต่ละแถว รวมชื่อห้องปฏิบัติการที่เลือกในแต่ละแถว
+            // ดึงค่าบันทึกของแต่ละแถว รวมชื่อห้องปฏิบัติการที่ระบุในแต่ละแถว
             const updatedRows = item.rows.map((row, rowIdx) => {
                 const selectedLab = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`) ? 
                                     document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`).value : 
