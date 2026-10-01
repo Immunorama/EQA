@@ -66,7 +66,7 @@
                 <div id="ncFormContainer"></div>
 
                 <button id="uploadBtn" class="btn btn-success w-100 fw-bold py-3 mt-3 shadow">
-                    2. บันทึกข้อมูลลง Google Sheet & Drive
+                    2. บันทึกข้อมูลลง Google Sheet & Drive (และสร้าง PDF NC)
                 </button>
             </div>
 
@@ -77,7 +77,7 @@
 
 <script>
     // 📌 URL ของ Google Apps Script (Web App URL ที่ลงท้ายด้วย /exec)
-    const GAS_URL = "https://script.google.com/macros/s/AKfycbxOcZPOa61HJW_gdLhaoACAXiZSZEykzmEqpf99PWnPXklYNVrg3XCe7Ceha0L9_a07/exec";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxdcB2sgozDK5cGVoGLut_-eJelK34tNpfr0FtAlnfL6qYXtgtaBr4YrkJL0CG4CN9i/exec";
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
@@ -153,7 +153,7 @@
                     labName: detectedLabName
                 };
 
-                // สกัดผลการทดสอบทุกหน้า (เริ่มตั้งแต่หน้า 1)
+                // สกัดผลการทดสอบทุกหน้า
                 const fileRows = [];
                 for (let i = 1; i <= pdf.numPages; i++) {
                     await yieldToUI();
@@ -162,8 +162,6 @@
                     const pageText = textContent.items.map(item => item.str).join(' ');
 
                     if (pageText.includes("Your Result") && pageText.includes("SDI")) {
-                        
-                        // 1. ดึงชื่อการทดสอบ
                         let testName = "";
                         const testMatchWithDate = pageText.match(/\d{2}\/\d{2}\/\d{4}\s+([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
 
@@ -182,7 +180,6 @@
                             }
                         }
 
-                        // 2. ดึงค่า SDI
                         let sdi = "";
                         const sdiBlockMatch = pageText.match(/Your Result\s+SDI[\s\S]*?(\d+\.\d+|\d+)\s+([-\+]?\d+\.\d+|[-\+]?\d+)/i);
                         if (sdiBlockMatch) {
@@ -220,7 +217,6 @@
         showAlert("d-none", "");
     });
 
-    // Sync ชื่อห้องปฏิบัติการระหว่าง ตาราง Preview กับ ฟอร์ม NC
     function syncLabToNc(fileIdx, rowIdx) {
         const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
         const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
@@ -237,7 +233,6 @@
         }
     }
 
-    // แสดง Preview และฟอร์มบันทึกการตรวจสอบ NC
     function displayPreview(batchData) {
         const tbody = document.getElementById('testRowsBody');
         const ncContainer = document.getElementById('ncFormContainer');
@@ -271,7 +266,6 @@
                 `;
                 tbody.appendChild(tr);
 
-                // หากพบค่า SDI ผิดปกติ ให้สร้างฟอร์ม NC สำหรับรายการนี้
                 if (isOutOfLimit) {
                     ncCount++;
                     const uid = `nc_${fileIdx}_${rowIdx}`;
@@ -401,7 +395,6 @@
         reader.onerror = (error) => reject(error);
     });
 
-    // ส่งข้อมูลลง Google Apps Script (แนบทั้งไฟล์ PDF Base64 และข้อมูลแถว)
     uploadBtn.addEventListener('click', async () => {
         if (!GAS_URL || GAS_URL.includes("ใส่_WEB_APP_ID_ของคุณที่นี่")) {
             alert("กรุณากรอก Google Apps Script URL ในตัวแปร GAS_URL ในโค้ดก่อนครับ");
@@ -414,7 +407,7 @@
 
         for (let fileIdx = 0; fileIdx < totalFiles; fileIdx++) {
             const item = batchExtractedData[fileIdx];
-            uploadBtn.innerText = `กำลังอัปโหลดไฟล์และบันทึกข้อมูล ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
+            uploadBtn.innerText = `กำลังบันทึกและสร้าง PDF NC ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
 
             const updatedRows = item.rows.map((row, rowIdx) => {
                 const selectedLab = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`) ? 
@@ -472,7 +465,6 @@
             });
 
             try {
-                // แปลงไฟล์ PDF เป็น Base64 แนบไปด้วย
                 const base64File = await fileToBase64(item.file);
 
                 const payload = {
@@ -499,12 +491,12 @@
         }
 
         uploadBtn.disabled = false;
-        uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive";
+        uploadBtn.innerText = "2. บันทึกข้อมูลลง Google Sheet & Drive (และสร้าง PDF NC)";
 
         if (successCount === totalFiles) {
-            showAlert("alert-success", `🎉 บันทึกไฟล์ PDF และข้อมูลลง Sheet เรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
+            showAlert("alert-success", `🎉 บันทึกข้อมูล และสร้างไฟล์ PDF รายงาน NC เรียบร้อยแล้วทั้ง ${successCount} ไฟล์!`);
         } else {
-            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log ใน Console เพิ่มเติม)`);
+            showAlert("alert-warning", `⚠️ บันทึกสำเร็จ ${successCount} จาก ${totalFiles} ไฟล์ (ตรวจสอบ Log เพิ่มเติม)`);
         }
     });
 
