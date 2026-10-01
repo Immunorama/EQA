@@ -175,9 +175,20 @@
                                     .replace(/^.*?CYCLE\s*\d+\s*SAMPLE\s*[\dI]+\s*/i, '')
                                     .replace(/^.*?LABORATORY REF\. NO\..*?\s*/i, '')
                                     .replace(/^.*\/[A-Za-z]\s*/i, '')
-                                    .replace(/^[\d\s\+\-\.\/]+/g, '')
                                     .trim();
                             }
+                        }
+
+                        // 🛠️ คลีนคำขยะ/หัวข้อที่ติดเข้ามาเพื่อความแม่นยำ
+                        if (testName) {
+                            testName = testName
+                                .replace(/Standard\s+Deviation\s*(Index)?/gi, '')
+                                .replace(/Your\s+Result/gi, '')
+                                .replace(/\bSDI\b/gi, '')
+                                .replace(/\bMean\b/gi, '')
+                                .replace(/^[\d\s\+\-\.\/:,\(\)\=]+/g, '')
+                                .replace(/\s+/g, ' ')
+                                .trim();
                         }
 
                         let sdi = "";
