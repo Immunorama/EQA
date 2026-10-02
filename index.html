@@ -53,7 +53,7 @@
                                 <th>โปรแกรม</th>
                                 <th>Cycle/Sample</th>
                                 <th>ชื่อการทดสอบ</th>
-                                <th style="min-width: 220px;">ชื่อห้องปฏิบัติการ (Lab)</th>
+                                <th style="min-width: 200px;">ชื่อเครื่อง</th>
                                 <th>ค่า SDI</th>
                                 <th>สถานะ</th>
                             </tr>
@@ -83,6 +83,43 @@
 
     let batchExtractedData = []; 
     let selectedFiles = [];
+
+    // รายการเครื่องตรวจวิเคราะห์ (Dropdown Options)
+    const machineOptions = [
+        "E801 Leanlab",
+        "E801 SDMC",
+        "C513",
+        "C503",
+        "Alinity c Leanlab",
+        "Alinity c SDMC",
+        "Alinity i Leanlab",
+        "Alinity i SDMC",
+        "Liaison"
+    ];
+
+    // ฟังก์ชันสร้าง Dropdown HTML ชื่อเครื่อง
+    function renderMachineSelect(id, selectedValue, onchangeFunc) {
+        let optionsHtml = machineOptions.map(opt => {
+            const isSelected = selectedValue && (
+                selectedValue.trim().toLowerCase() === opt.toLowerCase() ||
+                (opt === "Liaison" && selectedValue.toLowerCase().includes("liaison"))
+            );
+            return `<option value="${opt}" ${isSelected ? 'selected' : ''}>${opt}</option>`;
+        }).join('');
+
+        const isCustom = selectedValue && !machineOptions.some(opt => 
+            selectedValue.trim().toLowerCase() === opt.toLowerCase() || 
+            (opt === "Liaison" && selectedValue.toLowerCase().includes("liaison"))
+        );
+
+        if (isCustom && selectedValue.trim() !== "") {
+            optionsHtml += `<option value="${selectedValue}" selected>${selectedValue}</option>`;
+        }
+
+        return `<select class="form-select border-primary fw-semibold text-primary" id="${id}" onchange="${onchangeFunc}">
+            ${optionsHtml}
+        </select>`;
+    }
 
     const pdfFileInput = document.getElementById('pdfFileInput');
     const processBtn = document.getElementById('processBtn');
@@ -133,14 +170,10 @@
 
                 const detectedProgram = progMatch ? progMatch[1].trim() : "IMMUNOASSAY";
 
-                // สกัดชื่อห้องปฏิบัติการ (Lab Name)
-                let detectedLabName = "";
+                // ตรวจจับชื่อเครื่องเบื้องต้นจาก PDF
+                let detectedLabName = "E801 Leanlab";
                 if (detectedProgram.toUpperCase().includes("TORCH") || page1Text.toUpperCase().includes("TORCH")) {
-                    detectedLabName = "Diasorin Liaison XL";
-                } else {
-                    const labMatch = page1Text.match(/(Reg\s*\([A-Za-z0-9]\)\s*-[^\n]+)/i) || 
-                                     page1Text.match(/LABORATORY REF\. NO\.\s*[\d\.\/A-Za-z]+\s*\n?\s*([^\n]+)/i);
-                    detectedLabName = labMatch ? labMatch[1].trim() : "Reg (A) - Rama Immuno I";
+                    detectedLabName = "Liaison";
                 }
 
                 const metadata = {
@@ -182,7 +215,7 @@
                             }
                         }
 
-                        // 🛠️️ คลีนคำขยะ/หัวข้อ/ชื่อโปรแกรมที่ติดเข้ามาเพื่อความแม่นยำ
+                        // คลีนคำขยะ/หัวข้อที่ติดเข้ามา
                         if (testName) {
                             testName = testName
                                 .replace(/SPECIFIC\s+PROTEINS/gi, '')
@@ -275,7 +308,7 @@
                     <td>C${row.cycle}/S${row.sample}</td>
                     <td class="fw-bold">${row.testName}</td>
                     <td>
-                        <input type="text" class="form-control form-control-sm fw-semibold text-primary" id="tbl_lab_${fileIdx}_${rowIdx}" value="${row.labName}" oninput="syncLabToNc(${fileIdx}, ${rowIdx})">
+                        ${renderMachineSelect(`tbl_lab_${fileIdx}_${rowIdx}`, row.labName, `syncLabToNc(${fileIdx},${rowIdx})`)}
                     </td>
                     <td class="${isOutOfLimit ? 'text-danger fw-bold' : ''}">${row.sdi}</td>
                     <td>${isOutOfLimit ? '<span class="badge-sdi-out">⚠️ พบ |SDI| > 2 (ต้องกรอก NC)</span>' : '<span class="text-muted">ปกติ</span>'}</td>
@@ -302,8 +335,8 @@
                                 <input type="text" class="form-control bg-light" id="${uid}_programName" value="${row.programName}" readonly>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label fw-semibold text-primary">ชื่อห้องปฏิบัติการ:</label>
-                                <input type="text" class="form-control border-primary fw-semibold text-primary" id="${uid}_labName" value="${row.labName}" oninput="syncNcToLab(${fileIdx}, ${rowIdx})">
+                                <label class="form-label fw-semibold text-primary">ชื่อเครื่อง:</label>
+                                ${renderMachineSelect(`${uid}_labName`, row.labName, `syncNcToLab(${fileIdx},${rowIdx})`)}
                             </div>
 
                             <!-- ข้อ 1 -->
