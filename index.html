@@ -167,17 +167,17 @@
 
                 const orgMatch = page1TextSpace.match(/([^\n]*Hospital[^\n]*)/i) || page1TextLine.match(/([^\n]*Hospital[^\n]*)/i);
                 
-                // สกัดชื่อ Lab และตัดข้อความส่วนเกินออก (เช่น Ramathibodi, Hospital, IMMUNOASSAY ฯลฯ)
+                // สกัดชื่อ Lab และดึงเฉพาะส่วน "Reg (...) - ..." โดยตัดส่วนเกินออกอย่างแม่นยำ
                 let detectedLabName = "Reg (A) - Rama Immuno I";
-                const regMatch = page1TextLine.match(/(Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+)/i)
-                              || page1TextSpace.match(/(Reg\s*\([A-Za-z0-9]\)\s*-\s*[^,\n\r]+)/i);
+                const regMatch = page1TextSpace.match(/Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+/i) 
+                              || page1TextLine.match(/Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+/i);
 
                 if (regMatch) {
-                    detectedLabName = regMatch[1].trim();
-                    // ตัดคำส่วนเกินตั้งแต่ Ramathibodi / Hospital / IMMUNOASSAY / LABORATORY ออก
-                    detectedLabName = detectedLabName
-                        .split(/Ramathibodi|Hospital|IMMUNOASSAY|TORCH|SEROLOGY|CARDIAC|CHEMISTRY|LIPIDS|SPECIFIC|LABORATORY|REF|CYCLE|Issue|Date/i)[0]
-                        .trim();
+                    let rawLab = regMatch[0].trim();
+                    rawLab = rawLab.split(/\s*(?:Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|TORCH|SEROLOGY|CARDIAC|CHEMISTRY|LIPIDS|SPECIFIC|LABORATORY|REF|CYCLE|SAMPLE|Explanation|Issue|Date)/i)[0].trim();
+                    if (rawLab) {
+                        detectedLabName = rawLab;
+                    }
                 }
 
                 const refMatch = page1TextSpace.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
