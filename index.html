@@ -162,21 +162,30 @@
                 // หน้า 1: สกัด Metadata หลัก
                 const page1 = await pdf.getPage(1);
                 const textContent1 = await page1.getTextContent();
-                const page1TextLine = textContent1.items.map(item => item.str).join('\n');
                 const page1TextSpace = textContent1.items.map(item => item.str).join(' ');
 
-                const orgMatch = page1TextSpace.match(/([^\n]*Hospital[^\n]*)/i) || page1TextLine.match(/([^\n]*Hospital[^\n]*)/i);
+                const orgMatch = page1TextSpace.match(/([^\n]*Hospital[^\n]*)/i);
                 
-                // สกัดชื่อ Lab และดึงเฉพาะส่วน "Reg (...) - ..." โดยตัดส่วนเกินออกอย่างแม่นยำ
+                // 🎯 สกัดชื่อ Lab แม่นยำ: ค้นหาคำที่ขึ้นต้นด้วย Reg (...) - และตัดตรงคำสำคัญถัดไปทันที
                 let detectedLabName = "Reg (A) - Rama Immuno I";
-                const regMatch = page1TextSpace.match(/Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+/i) 
-                              || page1TextLine.match(/Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+/i);
+                
+                // 1. ลองหาในแต่ละ Text Block ของ PDF ก่อน
+                for (let item of textContent1.items) {
+                    let str = item.str.trim();
+                    if (/Reg\s*\([A-Za-z0-9]\)\s*-/i.test(str)) {
+                        let cleaned = str.split(/\s*(?:Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|CYCLE|SAMPLE|LABORATORY|REF)/i)[0].trim();
+                        if (cleaned) {
+                            detectedLabName = cleaned;
+                            break;
+                        }
+                    }
+                }
 
-                if (regMatch) {
-                    let rawLab = regMatch[0].trim();
-                    rawLab = rawLab.split(/\s*(?:Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|TORCH|SEROLOGY|CARDIAC|CHEMISTRY|LIPIDS|SPECIFIC|LABORATORY|REF|CYCLE|SAMPLE|Explanation|Issue|Date)/i)[0].trim();
-                    if (rawLab) {
-                        detectedLabName = rawLab;
+                // 2. ถ้าข้อความติดกัน ให้ใช้ Regex Lookahead สกัดจากข้อความรวม
+                if (detectedLabName === "Reg (A) - Rama Immuno I") {
+                    const regMatch = page1TextSpace.match(/(Reg\s*\([A-Za-z0-9]\)\s*-\s*[\w\s]+?)(?=\s+(?:Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|CYCLE|SAMPLE|LABORATORY|REF|Issue|Explanation|\d+\/\d+|$))/i);
+                    if (regMatch && regMatch[1]) {
+                        detectedLabName = regMatch[1].trim();
                     }
                 }
 
@@ -204,7 +213,7 @@
                     defaultNcMachine: defaultNcMachine
                 };
 
-                // Pattern สแกนหน่วยให้ครอบคลุม mg/dl, g/dl, µg/dl ฯลฯ
+                // Pattern สแกนหน่วยผลตรวจ
                 const unitsPattern = "(AU\\/ml|INDEX|mIU\\/ml|U\\/ml|ng\\/ml|mg\\/L|mg\\/dl|g\\/dl|µg\\/dl|ug\\/dl|IU\\/ml|g\\/L|mmol\\/L|µg\\/L|ug\\/L|pmol\\/L|nmol\\/L|%|μg\\/dL|mg\\/dL)";
 
                 // สกัดผลการทดสอบทุกหน้า
@@ -233,7 +242,6 @@
                             }
                         }
 
-                        // คลีนคำขยะ/หัวข้อที่ติดเข้ามา
                         if (testName) {
                             testName = testName
                                 .replace(/SPECIFIC\s+PROTEINS/gi, '')
