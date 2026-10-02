@@ -162,28 +162,36 @@
                 // หน้า 1: สกัด Metadata หลัก
                 const page1 = await pdf.getPage(1);
                 const textContent1 = await page1.getTextContent();
-                const page1Text = textContent1.items.map(item => item.str).join('\n');
+                const page1TextLine = textContent1.items.map(item => item.str).join('\n');
+                const page1TextSpace = textContent1.items.map(item => item.str).join(' ');
 
-                const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
-                const regMatch = page1Text.match(/(Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+)/i);
-                const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
-                const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
-                const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i) || page1Text.match(/(\d{2}\/\d{2}\/\d{4})/);
-                const progMatch = page1Text.match(/(TORCH|SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+                const orgMatch = page1TextSpace.match(/([^\n]*Hospital[^\n]*)/i) || page1TextLine.match(/([^\n]*Hospital[^\n]*)/i);
+                
+                // สกัดชื่อ Lab (เช่น Reg (A) - Rama Immuno I)
+                let detectedLabName = "Reg (A) - Rama Immuno I";
+                const regMatch = page1TextSpace.match(/(Reg\s*\([A-Za-z0-9]\)\s*-\s*[^,\n\r]+)/i) 
+                              || page1TextLine.match(/(Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+)/i);
+
+                if (regMatch) {
+                    detectedLabName = regMatch[1].trim();
+                    detectedLabName = detectedLabName.replace(/\s*(LABORATORY|REF|CYCLE|Issue|Date).*$/i, '').trim();
+                }
+
+                const refMatch = page1TextSpace.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
+                const cycleSampleMatch = page1TextSpace.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
+                const dateMatch = page1TextSpace.match(/Issue Date:\s*([\d\/]+)/i) || page1TextSpace.match(/(\d{2}\/\d{2}\/\d{4})/);
+                const progMatch = page1TextSpace.match(/(TORCH|SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
                 const detectedProgram = progMatch ? progMatch[1].trim() : "IMMUNOASSAY";
-                
-                // สกัดชื่อ Lab จากเอกสารตรงๆ
-                const detectedLabName = regMatch ? regMatch[1].trim() : "Reg (A) - Rama Immuno I";
 
                 // ชื่อเครื่องเริ่มต้นสำหรับกรณีพบ NC (|SDI| > 2)
                 let defaultNcMachine = "Roche Cobas e402/e801";
-                if (detectedProgram.toUpperCase().includes("TORCH") || page1Text.toUpperCase().includes("TORCH")) {
+                if (detectedProgram.toUpperCase().includes("TORCH") || page1TextSpace.toUpperCase().includes("TORCH")) {
                     defaultNcMachine = "Liaison";
                 }
 
                 const metadata = {
-                    orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital (Immunology)",
+                    orgName: orgMatch ? orgMatch[1].trim() : "Ramathibodi Hospital",
                     programName: detectedProgram,
                     refNo: refMatch ? refMatch[1] : "",
                     issueDate: dateMatch ? dateMatch[1] : "",
@@ -249,7 +257,7 @@
                             fileRows.push({
                                 ...metadata,
                                 testName: testName,
-                                machineName: "-", // ค่าเริ่มต้นของรายการปกติยังไม่เลือกเครื่อง
+                                machineName: "-", 
                                 sdi: sdi
                             });
                         }
@@ -477,10 +485,16 @@
                 const sdiVal = parseFloat(row.sdi);
                 const isOutOfLimit = !isNaN(sdiVal) && Math.abs(sdiVal) > 2;
 
-                let rowData = { ...row };
+                const uid = `nc_${fileIdx}_${rowIdx}`;
+                const ncLabElem = document.getElementById(`${uid}_labName`);
+                const labNameVal = (isOutOfLimit && ncLabElem) ? ncLabElem.value : row.labName;
+
+                let rowData = { 
+                    ...row,
+                    labName: labNameVal
+                };
 
                 if (isOutOfLimit) {
-                    const uid = `nc_${fileIdx}_${rowIdx}`;
                     const selectedMachine = document.getElementById(`${uid}_machineName`) ? 
                                            document.getElementById(`${uid}_machineName`).value : 
                                            row.defaultNcMachine;
@@ -502,8 +516,8 @@
                         ...rowData,
                         invDate: formatDate(document.getElementById(`${uid}_invDate`) ? document.getElementById(`${uid}_invDate`).value : ""),
                         programName: document.getElementById(`${uid}_programName`) ? document.getElementById(`${uid}_programName`).value : row.programName,
-                        labName: document.getElementById(`${uid}_labName`) ? document.getElementById(`${uid}_labName`).value : row.labName,
-                        machineName: selectedMachine, // บันทึกชื่อเครื่องเฉพาะรายการที่ไม่ปกติ
+                        labName: labNameVal,
+                        machineName: selectedMachine,
                         check1: getFormattedValue(`${uid}_check1`),
                         check1Other: document.getElementById(`${uid}_check1Other`) ? document.getElementById(`${uid}_check1Other`).value : "",
                         check2: getFormattedValue(`${uid}_check2`),
@@ -520,7 +534,6 @@
                         verName: document.getElementById(`${uid}_verName`) ? document.getElementById(`${uid}_verName`).value : ""
                     };
                 } else {
-                    // รายการปกติ บันทึกเครื่องมือเป็น "-"
                     rowData.machineName = "-";
                 }
                 return rowData;
