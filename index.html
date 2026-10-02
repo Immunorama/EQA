@@ -153,6 +153,9 @@
                     labName: detectedLabName
                 };
 
+                // Pattern สแกนหน่วยให้ครอบคลุม mg/dl, g/dl, µg/dl ฯลฯ
+                const unitsPattern = "(AU\\/ml|INDEX|mIU\\/ml|U\\/ml|ng\\/ml|mg\\/L|mg\\/dl|g\\/dl|µg\\/dl|ug\\/dl|IU\\/ml|g\\/L|mmol\\/L|µg\\/L|ug\\/L|pmol\\/L|nmol\\/L|%|μg\\/dL|mg\\/dL)";
+
                 // สกัดผลการทดสอบทุกหน้า
                 const fileRows = [];
                 for (let i = 1; i <= pdf.numPages; i++) {
@@ -163,12 +166,12 @@
 
                     if (pageText.includes("Your Result") && pageText.includes("SDI")) {
                         let testName = "";
-                        const testMatchWithDate = pageText.match(/\d{2}\/\d{2}\/\d{4}\s+([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+                        const testMatchWithDate = pageText.match(new RegExp(`\\d{2}\\/\\d{2}\\/\\d{4}\\s+([A-Za-z0-9\\s\\-\\/\(\\&\)]+),\\s*${unitsPattern}`, "i"));
 
                         if (testMatchWithDate) {
                             testName = testMatchWithDate[1].trim();
                         } else {
-                            const testMatch = pageText.match(/([A-Za-z0-9\s\-\/\(\&\)]+),\s*(AU\/ml|INDEX|mIU\/ml|U\/ml|ng\/ml|mg\/L|IU\/ml|g\/L|mmol\/L|µg\/L|pmol\/L|nmol\/L|%)/i);
+                            const testMatch = pageText.match(new RegExp(`([A-Za-z0-9\\s\\-\\/\(\\&\)]+),\\s*${unitsPattern}`, "i"));
                             if (testMatch) {
                                 testName = testMatch[1]
                                     .replace(/^.*?\d{2}\/\d{2}\/\d{4}\s*/i, '')
@@ -179,9 +182,11 @@
                             }
                         }
 
-                        // 🛠️ คลีนคำขยะ/หัวข้อที่ติดเข้ามาเพื่อความแม่นยำ
+                        // 🛠️️ คลีนคำขยะ/หัวข้อ/ชื่อโปรแกรมที่ติดเข้ามาเพื่อความแม่นยำ
                         if (testName) {
                             testName = testName
+                                .replace(/SPECIFIC\s+PROTEINS/gi, '')
+                                .replace(/IMMUNOASSAY/gi, '')
                                 .replace(/Standard\s+Deviation\s*(Index)?/gi, '')
                                 .replace(/Your\s+Result/gi, '')
                                 .replace(/\bSDI\b/gi, '')
