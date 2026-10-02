@@ -160,23 +160,43 @@
                 const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
                 
                 // หน้า 1: สกัด Metadata หลัก
-                const page1 = await pdf.getPage(1);
-                const textContent1 = await page1.getTextContent();
-                const page1TextSpace = textContent1.items.map(item => item.str).join(' ');
+               // หน้า 1: สกัด Metadata หลัก
+const page1 = await pdf.getPage(1);
+const textContent1 = await page1.getTextContent();
+const page1TextSpace = textContent1.items.map(item => item.str).join(' ');
 
-                const orgMatch = page1TextSpace.match(/([^\n]*Hospital[^\n]*)/i);
-                
-                // 🎯 สกัดชื่อ Lab แม่นยำ: จับเฉพาะคำที่ขึ้นต้นด้วย Reg (...) - และตัดส่วนเกินหน้า-หลังออกทั้งหมด
-                let detectedLabName = "Reg (A) - Rama Immuno I";
-                
-                const regMatch = page1TextSpace.match(/(Reg\s*\([A-Za-z0-9]+\)\s*-[^\n\r]+)/i);
-                if (regMatch && regMatch[1]) {
-                    const rawLab = regMatch[1];
-                    const cleaned = rawLab.split(/\s+(?:Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|CYCLE|SAMPLE|LABORATORY|REF|Issue|Explanation|\d+\/\d+|$)/i)[0].trim();
-                    if (cleaned) {
-                        detectedLabName = cleaned;
-                    }
-                }
+// 🎯 สกัดชื่อ Lab แบบเจาะจง: เริ่มจับที่ Reg (...) - และหยุดทันทีก่อนถึง Ramathibodi / Hospital / IMMUNOASSAY
+let detectedLabName = "Reg (A) - Rama Immuno I"; // ค่าเริ่มต้นสำรอง
+
+const regMatch = page1TextSpace.match(/(Reg\s*\([A-Za-z0-9]+\)\s*-\s*.*?\b)(?=\s+(?:Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|CYCLE|SAMPLE|$))/i);
+
+if (regMatch && regMatch[1]) {
+    detectedLabName = regMatch[1].trim();
+}
+
+const refMatch = page1TextSpace.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
+const cycleSampleMatch = page1TextSpace.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
+const dateMatch = page1TextSpace.match(/Issue Date:\s*([\d\/]+)/i) || page1TextSpace.match(/(\d{2}\/\d{2}\/\d{4})/);
+const progMatch = page1TextSpace.match(/(TORCH|SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
+
+const detectedProgram = progMatch ? progMatch[1].trim() : "IMMUNOASSAY";
+
+// ชื่อเครื่องเริ่มต้นสำหรับกรณีพบ NC (|SDI| > 2)
+let defaultNcMachine = "Roche Cobas e402/e801";
+if (detectedProgram.toUpperCase().includes("TORCH") || page1TextSpace.toUpperCase().includes("TORCH")) {
+    defaultNcMachine = "Liaison";
+}
+
+const metadata = {
+    orgName: "Ramathibodi Hospital",
+    programName: detectedProgram,
+    refNo: refMatch ? refMatch[1] : "",
+    issueDate: dateMatch ? dateMatch[1] : "",
+    cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
+    sample: cycleSampleMatch ? cycleSampleMatch[2] : "",
+    labName: detectedLabName, // ได้ค่า "Reg (A) - Rama Immuno I" ชัวร์ 100%
+    defaultNcMachine: defaultNcMachine
+};
 
                 const refMatch = page1TextSpace.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
                 const cycleSampleMatch = page1TextSpace.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
