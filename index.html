@@ -50,6 +50,7 @@
                             <tr>
                                 <th>#</th>
                                 <th>ชื่อไฟล์</th>
+                                <th>ชื่อ Lab</th>
                                 <th>โปรแกรม</th>
                                 <th>Cycle/Sample</th>
                                 <th>ชื่อการทดสอบ</th>
@@ -86,6 +87,7 @@
 
     // รายการเครื่องตรวจวิเคราะห์ (Dropdown Options)
     const machineOptions = [
+        "Roche Cobas e402/e801",
         "E801 Leanlab",
         "E801 SDMC",
         "C513",
@@ -163,17 +165,21 @@
                 const page1Text = textContent1.items.map(item => item.str).join('\n');
 
                 const orgMatch = page1Text.match(/([^\n]*Hospital[^\n]*)/i);
+                const regMatch = page1Text.match(/(Reg\s*\([A-Za-z0-9]\)\s*-\s*[^\n\r]+)/i);
                 const refMatch = page1Text.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
                 const cycleSampleMatch = page1Text.match(/CYCLE\s*(\d+)\s*SAMPLE\s*([I\d]+)/i);
                 const dateMatch = page1Text.match(/Issue Date:\s*([\d\/]+)/i) || page1Text.match(/(\d{2}\/\d{2}\/\d{4})/);
                 const progMatch = page1Text.match(/(TORCH|SEROLOGY\s*\([^\)]+\)|SEROLOGY|IMMUNOASSAY SPECIALITY\s+[I1\d]+|IMMUNOSUPPRESSANT|IMMUNOASSAY|SPECIFIC PROTEINS|CARDIAC|CHEMISTRY|LIPIDS)/i);
 
                 const detectedProgram = progMatch ? progMatch[1].trim() : "IMMUNOASSAY";
+                
+                // สกัดชื่อห้องปฏิบัติการ (Lab Name)
+                const detectedLabName = regMatch ? regMatch[1].trim() : "Reg (A) - Rama Immuno I";
 
-                // ตรวจจับชื่อเครื่องเบื้องต้นจาก PDF
-                let detectedLabName = "E801 Leanlab";
+                // ตรวจจับชื่อเครื่องวิเคราะห์ที่เลือกใช้เบื้องต้น
+                let detectedMachineName = "Roche Cobas e402/e801";
                 if (detectedProgram.toUpperCase().includes("TORCH") || page1Text.toUpperCase().includes("TORCH")) {
-                    detectedLabName = "Liaison";
+                    detectedMachineName = "Liaison";
                 }
 
                 const metadata = {
@@ -183,7 +189,8 @@
                     issueDate: dateMatch ? dateMatch[1] : "",
                     cycle: cycleSampleMatch ? cycleSampleMatch[1] : "",
                     sample: cycleSampleMatch ? cycleSampleMatch[2] : "",
-                    labName: detectedLabName
+                    labName: detectedLabName,
+                    machineName: detectedMachineName
                 };
 
                 // Pattern สแกนหน่วยให้ครอบคลุม mg/dl, g/dl, µg/dl ฯลฯ
@@ -242,8 +249,6 @@
                             fileRows.push({
                                 ...metadata,
                                 testName: testName,
-                                labName: metadata.labName,
-                                machineName: metadata.labName,
                                 sdi: sdi
                             });
                         }
@@ -266,17 +271,17 @@
         showAlert("d-none", "");
     });
 
-    function syncLabToNc(fileIdx, rowIdx) {
-        const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
-        const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
+    function syncMachineToNc(fileIdx, rowIdx) {
+        const tableInput = document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`);
+        const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_machineName`);
         if (tableInput && ncInput) {
             ncInput.value = tableInput.value;
         }
     }
 
-    function syncNcToLab(fileIdx, rowIdx) {
-        const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_labName`);
-        const tableInput = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`);
+    function syncNcToMachine(fileIdx, rowIdx) {
+        const ncInput = document.getElementById(`nc_${fileIdx}_${rowIdx}_machineName`);
+        const tableInput = document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`);
         if (ncInput && tableInput) {
             tableInput.value = ncInput.value;
         }
@@ -304,11 +309,12 @@
                 tr.innerHTML = `
                     <td>${globalIndex++}</td>
                     <td class="text-truncate" style="max-width: 130px;" title="${item.fileName}">${item.fileName}</td>
+                    <td class="fw-semibold text-secondary">${row.labName}</td>
                     <td>${row.programName}</td>
                     <td>C${row.cycle}/S${row.sample}</td>
                     <td class="fw-bold">${row.testName}</td>
                     <td>
-                        ${renderMachineSelect(`tbl_lab_${fileIdx}_${rowIdx}`, row.labName, `syncLabToNc(${fileIdx},${rowIdx})`)}
+                        ${renderMachineSelect(`tbl_machine_${fileIdx}_${rowIdx}`, row.machineName, `syncMachineToNc(${fileIdx},${rowIdx})`)}
                     </td>
                     <td class="${isOutOfLimit ? 'text-danger fw-bold' : ''}">${row.sdi}</td>
                     <td>${isOutOfLimit ? '<span class="badge-sdi-out">⚠️ พบ |SDI| > 2 (ต้องกรอก NC)</span>' : '<span class="text-muted">ปกติ</span>'}</td>
@@ -326,17 +332,21 @@
                             ⚠️ รายการที่ ${ncCount}: บันทึกการตรวจสอบ NC (${row.testName} | SDI: ${row.sdi} | ${item.fileName})
                         </h5>
                         <div class="row g-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label fw-semibold">วัน เดือน ปี ที่ทำการตรวจสอบ:</label>
                                 <input type="date" class="form-control" id="${uid}_invDate" value="${todayDate}">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
+                                <label class="form-label fw-semibold">ชื่อ Lab:</label>
+                                <input type="text" class="form-control bg-light fw-bold" id="${uid}_labName" value="${row.labName}" readonly>
+                            </div>
+                            <div class="col-md-3">
                                 <label class="form-label fw-semibold">ชื่อโปรแกรม:</label>
                                 <input type="text" class="form-control bg-light" id="${uid}_programName" value="${row.programName}" readonly>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label fw-semibold text-primary">ชื่อเครื่อง:</label>
-                                ${renderMachineSelect(`${uid}_labName`, row.labName, `syncNcToLab(${fileIdx},${rowIdx})`)}
+                                ${renderMachineSelect(`${uid}_machineName`, row.machineName, `syncNcToMachine(${fileIdx},${rowIdx})`)}
                             </div>
 
                             <!-- ข้อ 1 -->
@@ -459,17 +469,16 @@
             uploadBtn.innerText = `กำลังบันทึกและสร้าง PDF NC ${fileIdx + 1}/${totalFiles} (${item.fileName})...`;
 
             const updatedRows = item.rows.map((row, rowIdx) => {
-                const selectedLab = document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`) ? 
-                                    document.getElementById(`tbl_lab_${fileIdx}_${rowIdx}`).value : 
-                                    row.labName;
+                const selectedMachine = document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`) ? 
+                                       document.getElementById(`tbl_machine_${fileIdx}_${rowIdx}`).value : 
+                                       row.machineName;
 
                 const sdiVal = parseFloat(row.sdi);
                 const isOutOfLimit = !isNaN(sdiVal) && Math.abs(sdiVal) > 2;
 
                 let rowData = {
                     ...row,
-                    labName: selectedLab,
-                    machineName: selectedLab
+                    machineName: selectedMachine
                 };
 
                 if (isOutOfLimit) {
@@ -492,8 +501,8 @@
                         ...rowData,
                         invDate: formatDate(document.getElementById(`${uid}_invDate`) ? document.getElementById(`${uid}_invDate`).value : ""),
                         programName: document.getElementById(`${uid}_programName`) ? document.getElementById(`${uid}_programName`).value : row.programName,
-                        labName: selectedLab,
-                        machineName: selectedLab,
+                        labName: document.getElementById(`${uid}_labName`) ? document.getElementById(`${uid}_labName`).value : row.labName,
+                        machineName: selectedMachine,
                         check1: getFormattedValue(`${uid}_check1`),
                         check1Other: document.getElementById(`${uid}_check1Other`) ? document.getElementById(`${uid}_check1Other`).value : "",
                         check2: getFormattedValue(`${uid}_check2`),
