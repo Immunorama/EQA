@@ -165,16 +165,16 @@
                 const textContent1 = await page1.getTextContent();
                 const page1TextSpace = textContent1.items.map(item => item.str).join(' ');
 
-                // 🎯 1. สกัดจาก Text Block แต่ละชิ้นก่อน (แม่นยำสูงที่สุด)
+                // 🎯 1. สกัดชื่อ Lab แยกตามแต่ละไฟล์ 100% (ไม่ใช้ค่า Default ของไฟล์อื่น)
                 let detectedLabName = "";
                 const stopPattern = /\s*(?:Authorised|Sarah|Sally|Fleck|Picton|Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|CYCLE|SAMPLE|LABORATORY|REF|Issue|Date|Randox|CRUMLIN|Tel|Email|UKAS|\d+\/\d+)/i;
 
+                // วิธีที่ 1: ค้นหาใน Text Item รายบล็อก
                 for (let item of textContent1.items) {
                     let str = item.str.trim();
                     if (/Reg\s*\([A-Za-z0-9]+\)/i.test(str)) {
                         let regIndex = str.search(/Reg\s*\(/i);
-                        let extracted = str.substring(regIndex).trim();
-                        extracted = extracted.split(stopPattern)[0].trim();
+                        let extracted = str.substring(regIndex).split(stopPattern)[0].trim();
                         if (extracted) {
                             detectedLabName = extracted;
                             break;
@@ -182,15 +182,15 @@
                     }
                 }
 
-                // 🎯 2. ถ้าใน Text Block ไม่เจอ ให้สกัดจากข้อความรวมทั้งหน้า
+                // วิธีที่ 2: ถ้าใน Text Item ไม่เจอ ค้นหาจากข้อความรวมทั้งหน้า
                 if (!detectedLabName) {
-                    const regMatch = page1TextSpace.match(/(Reg\s*\([A-Za-z0-9]+\)(?:\s*-\s*|\s+)[A-Za-z0-9\s\-\(\)&]+?)(?=\s+(?:Authorised|Sarah|Sally|Fleck|Picton|Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|CYCLE|SAMPLE|LABORATORY|REF|Issue|Explanation|Date|Randox|CRUMLIN|Tel|Email|UKAS|\d+\/\d+|$))/i);
+                    const regMatch = page1TextSpace.match(/(Reg\s*\([A-Za-z0-9]+\)(?:\s*-\s*|\s+)[A-Za-z0-9\s\-\(\)&]+?)(?=\s+(?:Authorised|Sarah|Sally|Fleck|Picton|Ramathibodi|Hospital|\(?Immunology\)?|IMMUNOASSAY|CYCLE|SAMPLE|LABORATORY|REF|Issue|Date|Randox|CRUMLIN|Tel|Email|UKAS|\d+\/\d+|$))/i);
                     if (regMatch && regMatch[1]) {
                         detectedLabName = regMatch[1].trim();
                     }
                 }
 
-                // 🎯 3. Fallback ขั้นสุดท้าย
+                // วิธีที่ 3: Fallback ขั้นสุดท้ายสำหรับไฟล์รูปแบบพิเศษ
                 if (!detectedLabName) {
                     const fallbackMatch = page1TextSpace.match(/Reg\s*\([A-Za-z0-9]+\)[^\n\r,]+/i);
                     if (fallbackMatch) {
@@ -198,8 +198,9 @@
                     }
                 }
 
+                // หากสกัดไม่ได้จริงๆ ให้แสดงชื่อไฟล์แทน เพื่อป้องกันดึงชื่อไฟล์อื่นมาใส่
                 if (!detectedLabName) {
-                    detectedLabName = "ไม่ระบุชื่อ Lab";
+                    detectedLabName = `ไม่พบชื่อ Lab (${file.name})`;
                 }
 
                 const refMatch = page1TextSpace.match(/LABORATORY REF\. NO\.\s*([\d\.\/A-Za-z]+)/i);
@@ -226,7 +227,7 @@
                     defaultNcMachine: defaultNcMachine
                 };
 
-                // Pattern สแกนหน่วยผลตรวจ
+                // Pattern สแกนหน่วยผลตรวจ (เพิ่ม pg/ml และหน่วยอื่นๆ ครบถ้วน)
                 const unitsPattern = "(AU\\/ml|INDEX|mIU\\/ml|U\\/ml|ng\\/ml|pg\\/ml|ng\\/L|pg\\/L|µIU\\/ml|uIU\\/ml|mU\\/L|mg\\/L|mg\\/dl|g\\/dl|µg\\/dl|ug\\/dl|IU\\/ml|g\\/L|mmol\\/L|µg\\/L|ug\\/L|pmol\\/L|nmol\\/L|%|μg\\/dL|mg\\/dL)";
 
                 // สกัดผลการทดสอบทุกหน้า
@@ -437,7 +438,7 @@
                             <div class="col-12">
                                 <label class="form-label fw-semibold">5. อื่นๆ:</label>
                                 <select class="form-select" id="${uid}_check5" onchange="toggleOtherInput('${uid}_check5', '${uid}_check5Other')">
-                                    <option value="อื่นๆ">4. อื่นๆ</option>
+                                    <option value="อื่นๆ">5. อื่นๆ</option>
                                     <option value="-" selected>5. -</option>
                                 </select>
                                 <input type="text" class="form-control mt-2" id="${uid}_check5Other" placeholder="ระบุข้อมูลอื่นๆ..." style="display:none;">
